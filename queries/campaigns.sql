@@ -50,6 +50,10 @@ med AS (
 insLists AS (
     INSERT INTO campaign_lists (campaign_id, list_id, list_name)
         SELECT (SELECT id FROM camp), id, name FROM lists WHERE id=ANY($15::INT[])
+),
+insExclLists AS (
+    INSERT INTO campaign_exclude_lists (campaign_id, list_id, list_name)
+        SELECT (SELECT id FROM camp), id, name FROM lists WHERE id=ANY($22::INT[])
 )
 SELECT id FROM camp;
 
@@ -117,6 +121,10 @@ WITH lists AS (
     SELECT campaign_id, JSON_AGG(JSON_BUILD_OBJECT('id', list_id, 'name', list_name)) AS lists FROM campaign_lists
     WHERE campaign_id = ANY($1) GROUP BY campaign_id
 ),
+excludeLists AS (
+    SELECT campaign_id, JSON_AGG(JSON_BUILD_OBJECT('id', list_id, 'name', list_name)) AS lists FROM campaign_exclude_lists
+    WHERE campaign_id = ANY($1) GROUP BY campaign_id
+),
 media AS (
     SELECT campaign_id, JSON_AGG(JSON_BUILD_OBJECT('id', media_id, 'filename', filename)) AS media FROM campaign_media
     WHERE campaign_id = ANY($1) GROUP BY campaign_id
@@ -141,9 +149,11 @@ SELECT id as campaign_id,
     COALESCE(c.num, 0) AS clicks,
     COALESCE(b.num, 0) AS bounces,
     COALESCE(l.lists, '[]') AS lists,
+    COALESCE(el.lists, '[]') AS exclude_lists,
     COALESCE(m.media, '[]') AS media
 FROM (SELECT id FROM UNNEST($1) AS id) x
 LEFT JOIN lists AS l ON (l.campaign_id = id)
+LEFT JOIN excludeLists AS el ON (el.campaign_id = id)
 LEFT JOIN media AS m ON (m.campaign_id = id)
 LEFT JOIN views AS v ON (v.campaign_id = id)
 LEFT JOIN clicks AS c ON (c.campaign_id = id)
@@ -212,6 +222,12 @@ counts AS (
             END
         )
     JOIN subscribers s ON (s.id = sl.subscriber_id AND s.status != 'blocklisted')
+    -- Subscriber should not be in any of the campaign's exclusion lists.
+    WHERE NOT EXISTS (
+        SELECT 1 FROM campaign_exclude_lists cel
+        JOIN subscriber_lists esl ON (esl.list_id = cel.list_id AND esl.subscriber_id = sl.subscriber_id)
+        WHERE cel.campaign_id = camps.id
+    )
     GROUP BY camps.id
 ),
 updateCounts AS (
@@ -298,7 +314,11 @@ SELECT link_clicks.campaign_id,
 -- name: get-running-campaign
 -- Returns the metadata for a running campaign that is required by next-campaign-subscribers to retrieve
 -- a batch of campaign subscribers for processing.
-SELECT campaigns.id AS campaign_id, campaigns.type as campaign_type, max_subscriber_id, lists.id AS list_id
+SELECT campaigns.id AS campaign_id, campaigns.type as campaign_type, max_subscriber_id, lists.id AS list_id,
+    (
+        SELECT COALESCE(ARRAY_AGG(list_id), '{}') FROM campaign_exclude_lists
+        WHERE campaign_id = campaigns.id AND list_id IS NOT NULL
+    ) AS exclude_list_ids
     FROM campaigns
     JOIN campaign_lists ON (campaign_lists.campaign_id = campaigns.id)
     JOIN lists ON (lists.id = campaign_lists.list_id)
@@ -334,6 +354,11 @@ subs AS (
             AND s.id <= $4
              -- Subscriber should not be blacklisted.
             AND s.status != 'blocklisted'
+            -- Subscriber should not be in any of the campaign's exclusion lists ($7).
+            AND NOT EXISTS (
+                SELECT 1 FROM subscriber_lists esl
+                WHERE esl.subscriber_id = s.id AND esl.list_id = ANY($7::INT[])
+            )
             AND (
                 -- If it's an optin campaign and the list is double-optin, only pick unconfirmed subscribers.
                 ($2 = 'optin' AND sl.status = 'unconfirmed' AND campLists.optin = 'double')
@@ -364,6 +389,11 @@ SELECT * FROM subscribers
 LEFT JOIN subscriber_lists ON (subscribers.id = subscriber_lists.subscriber_id AND subscriber_lists.status != 'unsubscribed')
 WHERE subscriber_lists.list_id=ANY(
     SELECT list_id FROM campaign_lists where campaign_id=$1 AND list_id IS NOT NULL
+)
+AND NOT EXISTS (
+    SELECT 1 FROM campaign_exclude_lists cel
+    JOIN subscriber_lists esl ON (esl.list_id = cel.list_id AND esl.subscriber_id = subscribers.id)
+    WHERE cel.campaign_id = $1
 )
 ORDER BY RANDOM() LIMIT 1;
 
@@ -400,6 +430,15 @@ WITH camp AS (
 clists AS (
     -- Reset list relationships
     DELETE FROM campaign_lists WHERE campaign_id = $1 AND NOT(list_id = ANY($14))
+),
+celists AS (
+    -- Reset exclusion list relationships.
+    DELETE FROM campaign_exclude_lists WHERE campaign_id = $1 AND NOT(list_id = ANY(COALESCE($21::INT[], '{}')))
+),
+celistsi AS (
+    INSERT INTO campaign_exclude_lists (campaign_id, list_id, list_name)
+        (SELECT $1 as campaign_id, id, name FROM lists WHERE id=ANY($21::INT[]))
+        ON CONFLICT (campaign_id, list_id) DO UPDATE SET list_name = EXCLUDED.list_name
 ),
 med AS (
     DELETE FROM campaign_media WHERE campaign_id = $1

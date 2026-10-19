@@ -30,6 +30,11 @@
 				{{ template "list-selector" dict "Root" $root "Model" "form.lists" "ListID" "campaign-lists" "Placeholder" "campaigns.sendToLists" "Disabled" "!canEdit" }}
 			</fieldset>
 
+			<fieldset class="card" data-testid="campaign-exclude-lists">
+				<legend>{{ $root.L.T "campaigns.excludeLists" }}</legend>
+				{{ template "list-selector" dict "Root" $root "Model" "form.exclude_lists" "ListID" "campaign-exclude-lists" "Placeholder" "campaigns.excludeListsPlaceholder" "Hint" "campaigns.excludeListsHelp" "Disabled" "!canEdit" }}
+			</fieldset>
+
 			<fieldset class="card">
 				<legend>{{ $root.L.Tc "globals.terms.messenger" 1 }}</legend>
 				<div data-field>

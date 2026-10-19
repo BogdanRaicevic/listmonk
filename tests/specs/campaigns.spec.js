@@ -572,6 +572,42 @@ test('uploads an attachment, persists it and delivers it when starting from the 
   expect(await campaign(page, c.id)).toMatchObject({ status: 'finished', archive: true, archive_slug: 'delivered-newsletter' });
 });
 
+test('excludes subscribers in exclusion lists from delivery', async ({ page }) => {
+  const list = async (name) => data(await page.request.post('/api/lists', { data: { name, type: 'private', optin: 'single' } }));
+  const target = await list('Exclusion target');
+  const exclude = await list('Exclusion list');
+  for (const name of ['a', 'b', 'c']) {
+    await data(await page.request.post('/api/subscribers', { data: {
+      email: `${name}@exclude.example.com`, name, status: 'enabled', lists: name === 'b' ? [target.id, exclude.id] : [target.id],
+    } }));
+  }
+
+  // A list can't be both a target and an exclusion list.
+  const bad = await page.request.post('/api/campaigns', { data: {
+    name: 'Bad', subject: 'Bad', content_type: 'html', body: 'x', lists: [target.id], exclude_lists: [target.id],
+  } });
+  expect(bad.status()).toBe(400);
+
+  const c = await create(page, { subject: `Exclusion delivery ${Date.now()}`, lists: [target.id] });
+  await page.goto(`${CAMPAIGNS}/${c.id}`);
+  const fieldset = page.getByTestId('campaign-exclude-lists');
+  await expect(fieldset).toContainText('Exclude lists');
+  await selectList(fieldset, exclude.name);
+  await save(page, c.id);
+  await page.reload();
+  await expect(fieldset.locator('ot-taginput .badge')).toHaveCount(1);
+  await expect(fieldset.locator('ot-taginput .badge')).toContainText(exclude.name);
+  expect((await campaign(page, c.id)).exclude_lists.map((l) => l.id)).toEqual([exclude.id]);
+
+  await button(page, 'Start campaign').click();
+  await confirm(page);
+  await expect.poll(async () => (await campaign(page, c.id)).status, { timeout: 20000 }).toBe('finished');
+  expect(await campaign(page, c.id)).toMatchObject({ to_send: 2, sent: 2 });
+  const to = (await getMail()).filter((m) => m.Content.Headers.Subject?.[0] === c.subject)
+    .map((m) => m.Content.Headers.To[0]).sort();
+  expect(to).toEqual(['<a@exclude.example.com>', '<c@exclude.example.com>']);
+});
+
 test('starts, pauses, resumes and cancels from the listing', async ({ page }) => {
   // Keep sending long enough to change status at the default rate of 10 messages/s.
   const list = await data(await page.request.post('/api/lists', { data: { name: 'Slow audience', type: 'private', optin: 'single' } }));

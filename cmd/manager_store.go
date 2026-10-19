@@ -22,6 +22,8 @@ type runningCamp struct {
 	CampaignType    string `db:"campaign_type"`
 	MaxSubscriberID int    `db:"max_subscriber_id"`
 	ListID          int    `db:"list_id"`
+
+	ExcludeListIDs pq.Int64Array `db:"exclude_list_ids"`
 }
 
 func newManagerStore(q *models.Queries, c *core.Core, m media.Store) *store {
@@ -61,7 +63,7 @@ func (s *store) NextSubscribers(campID, lastFetchedID, limit int) ([]models.Subs
 	}
 
 	var out []models.Subscriber
-	err := s.queries.NextCampaignSubscribers.Select(&out, camps[0].CampaignID, camps[0].CampaignType, lastFetchedID, camps[0].MaxSubscriberID, pq.Array(listIDs), limit)
+	err := s.queries.NextCampaignSubscribers.Select(&out, camps[0].CampaignID, camps[0].CampaignType, lastFetchedID, camps[0].MaxSubscriberID, pq.Array(listIDs), limit, camps[0].ExcludeListIDs)
 	return out, err
 }
 

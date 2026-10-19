@@ -154,6 +154,22 @@ CREATE UNIQUE INDEX ON campaign_lists (campaign_id, list_id);
 DROP INDEX IF EXISTS idx_camp_lists_camp_id; CREATE INDEX idx_camp_lists_camp_id ON campaign_lists(campaign_id);
 DROP INDEX IF EXISTS idx_camp_lists_list_id; CREATE INDEX idx_camp_lists_list_id ON campaign_lists(list_id);
 
+-- Lists whose subscribers are excluded from a campaign, even if they are
+-- in one of the campaign's target lists (campaign_lists).
+DROP TABLE IF EXISTS campaign_exclude_lists CASCADE;
+CREATE TABLE campaign_exclude_lists (
+    id           BIGSERIAL PRIMARY KEY,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE ON UPDATE CASCADE,
+
+    -- Lists may be deleted, so list_id is nullable
+    -- and a copy of the original list name is maintained here.
+    list_id      INTEGER NULL REFERENCES lists(id) ON DELETE SET NULL ON UPDATE CASCADE,
+    list_name    TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX ON campaign_exclude_lists (campaign_id, list_id);
+DROP INDEX IF EXISTS idx_camp_excl_lists_camp_id; CREATE INDEX idx_camp_excl_lists_camp_id ON campaign_exclude_lists(campaign_id);
+DROP INDEX IF EXISTS idx_camp_excl_lists_list_id; CREATE INDEX idx_camp_excl_lists_list_id ON campaign_exclude_lists(list_id);
+
 DROP TABLE IF EXISTS campaign_views CASCADE;
 CREATE TABLE campaign_views (
     id               BIGSERIAL PRIMARY KEY,
