@@ -121,7 +121,11 @@ type CampaignMeta struct {
 	// campaign-list associations with a historical record of id + name that persist
 	// even after a list is deleted.
 	Lists types.JSONText `db:"lists" json:"lists"`
-	Media types.JSONText `db:"media" json:"media"`
+
+	// ExcludeLists are {list_id, name} pairs of lists whose subscribers are
+	// excluded from the campaign even if they are in one of the Lists.
+	ExcludeLists types.JSONText `db:"exclude_lists" json:"exclude_lists"`
+	Media        types.JSONText `db:"media" json:"media"`
 
 	StartedAt null.Time `db:"started_at" json:"started_at"`
 	ToSend    int       `db:"to_send" json:"to_send"`
@@ -137,6 +141,20 @@ func (c Campaign) ParsedLists() []CampaignList {
 
 	var out []CampaignList
 	if err := json.Unmarshal(c.Lists, &out); err != nil {
+		return nil
+	}
+
+	return out
+}
+
+// ParsedExcludeLists unmarshals the campaign's raw ExcludeLists JSON into a slice.
+func (c Campaign) ParsedExcludeLists() []CampaignList {
+	if len(c.ExcludeLists) == 0 {
+		return nil
+	}
+
+	var out []CampaignList
+	if err := json.Unmarshal(c.ExcludeLists, &out); err != nil {
 		return nil
 	}
 
@@ -182,6 +200,7 @@ func (camps Campaigns) LoadStats(stmt *sqlx.Stmt) error {
 	for i, c := range meta {
 		if c.CampaignID == camps[i].ID {
 			camps[i].Lists = c.Lists
+			camps[i].ExcludeLists = c.ExcludeLists
 			camps[i].Views = c.Views
 			camps[i].Clicks = c.Clicks
 			camps[i].Bounces = c.Bounces

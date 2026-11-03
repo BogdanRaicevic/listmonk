@@ -65,6 +65,7 @@ function component() {
         name: newName,
         subject: c.subject,
         lists: (c.lists || []).map((l) => l.id),
+        exclude_lists: (c.exclude_lists || []).filter((l) => l.id).map((l) => l.id),
         type: c.type,
         from_email: c.from_email,
         content_type: c.content_type,

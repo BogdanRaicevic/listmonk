@@ -2793,6 +2793,15 @@ components:
                 type: integer
               name:
                 type: string
+        exclude_lists:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
         started_at:
           type: string
         to_send:
@@ -2902,6 +2911,10 @@ components:
           type: array
           items:
             type: number
+        exclude_lists:
+          type: array
+          items:
+            type: integer
         from_email:
           type: string
         content_type:
@@ -2934,6 +2947,10 @@ components:
         subject:
           type: string
         lists:
+          type: array
+          items:
+            type: integer
+        exclude_lists:
           type: array
           items:
             type: integer

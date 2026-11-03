@@ -76,6 +76,9 @@ WITH l AS (
 ),
 c AS (
     UPDATE campaign_lists SET list_name = l.name FROM l WHERE campaign_lists.list_id = l.id RETURNING 1
+),
+ce AS (
+    UPDATE campaign_exclude_lists SET list_name = l.name FROM l WHERE campaign_exclude_lists.list_id = l.id
 )
 SELECT COUNT(*) FROM l, c;
 

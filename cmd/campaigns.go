@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,10 @@ type campReq struct {
 	// Campaign.Lists is JSONText for sending lists children
 	// to the outside world.
 	ListIDs []int `json:"lists"`
+
+	// Lists whose subscribers are excluded from the campaign.
+	// This overrides Campaign.ExcludeLists the same way as ListIDs.
+	ExcludeListIDs []int `json:"exclude_lists"`
 
 	MediaIDs []int `json:"media"`
 
@@ -460,6 +465,7 @@ func (a *App) CreateCampaign(c *echo.Context) error {
 	// Filter lists against the current user's permitted lists.
 	user := auth.GetUser(c)
 	o.ListIDs = user.FilterListsByPerm(auth.PermTypeManage, o.ListIDs)
+	o.ExcludeListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ExcludeListIDs)
 
 	// If the campaign's 'opt-in', prepare a default message.
 	switch o.Type {
@@ -490,7 +496,7 @@ func (a *App) CreateCampaign(c *echo.Context) error {
 		o.ArchiveTemplateID = o.TemplateID
 	}
 
-	out, err := a.core.CreateCampaign(o.Campaign, o.ListIDs, o.MediaIDs)
+	out, err := a.core.CreateCampaign(o.Campaign, o.ListIDs, o.ExcludeListIDs, o.MediaIDs)
 	if err != nil {
 		return err
 	}
@@ -527,7 +533,13 @@ func (a *App) UpdateCampaign(c *echo.Context) error {
 	// Read the incoming params into the existing campaign fields from the DB.
 	// This allows updating of values that have been sent whereas fields
 	// that are not in the request retain the old values.
+	// Existing exclusion lists are retained if the request doesn't have the field.
 	o := campReq{Campaign: cm}
+	for _, l := range cm.ParsedExcludeLists() {
+		if l.ID > 0 {
+			o.ExcludeListIDs = append(o.ExcludeListIDs, l.ID)
+		}
+	}
 	if err := c.Bind(&o); err != nil {
 		return err
 	}
@@ -535,6 +547,7 @@ func (a *App) UpdateCampaign(c *echo.Context) error {
 	// Filter lists against the current user's permitted lists.
 	user := auth.GetUser(c)
 	o.ListIDs = user.FilterListsByPerm(auth.PermTypeManage, o.ListIDs)
+	o.ExcludeListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ExcludeListIDs)
 
 	if c, err := a.validateCampaignFields(o); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -542,7 +555,7 @@ func (a *App) UpdateCampaign(c *echo.Context) error {
 		o = c
 	}
 
-	out, err := a.core.UpdateCampaign(id, o.Campaign, o.ListIDs, o.MediaIDs)
+	out, err := a.core.UpdateCampaign(id, o.Campaign, o.ListIDs, o.ExcludeListIDs, o.MediaIDs)
 	if err != nil {
 		return err
 	}
@@ -882,6 +895,13 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 
 	if len(c.ListIDs) == 0 {
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidListIDs"))
+	}
+
+	// A list can't be both a target and an exclusion list.
+	for _, id := range c.ExcludeListIDs {
+		if slices.Contains(c.ListIDs, id) {
+			return c, errors.New(a.i18n.T("campaigns.fieldInvalidExcludeListIDs"))
+		}
 	}
 
 	if !a.manager.HasMessenger(c.Messenger) {
