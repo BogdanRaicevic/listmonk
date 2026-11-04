@@ -8,7 +8,7 @@ import (
 	"github.com/knadh/stuffbin"
 )
 
-func V7_1_0(db *sqlx.DB, fs stuffbin.FileSystem, ko *koanf.Koanf, lo *log.Logger) error {
+func V7_0_1_Fork1(db *sqlx.DB, fs stuffbin.FileSystem, ko *koanf.Koanf, lo *log.Logger) error {
 	// Campaign exclusion lists.
 	if _, err := db.Exec(`
         CREATE TABLE IF NOT EXISTS campaign_exclude_lists (
