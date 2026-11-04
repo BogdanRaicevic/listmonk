@@ -86,13 +86,34 @@ function listenErrorEvents() {
 
   // Extract the message out of `file.go:123: message` log lines.
   const reMatchLog = /(.+?)\.go:\d+:(.+?)$/im;
-  const src = new EventSource(`${urls.api}/events?type=error`, { withCredentials: true });
 
+  // The stream is a long-lived connection. Browsers cap HTTP/1.1 connections
+  // per host (6 in Chromium), so every open admin tab holding one starves page
+  // loads. Only keep the stream open while the tab is visible.
+  let src = null;
   let numEv = 0;
-  src.onmessage = (e) => {
+  const close = () => {
+    if (src) {
+      src.close();
+      src = null;
+    }
+  };
+  const open = () => {
+    if (src || numEv >= 50 || document.visibilityState !== 'visible') {
+      return;
+    }
+    src = new EventSource(`${urls.api}/events?type=error`, { withCredentials: true });
+    src.onmessage = onMessage;
+  };
+
+  document.addEventListener('visibilitychange', () => (document.visibilityState === 'visible' ? open() : close()));
+  window.addEventListener('pagehide', close);
+  window.addEventListener('pageshow', open);
+
+  function onMessage(e) {
     // Cap the number of toasts to not flood the UI on a burst of errors.
     if (numEv >= 50) {
-      src.close();
+      close();
       return;
     }
     numEv += 1;
@@ -110,7 +131,9 @@ function listenErrorEvents() {
 
     const msg = reMatchLog.exec(d.message.trim());
     u.toast(msg ? msg[2].trim() : d.message, 'error');
-  };
+  }
+
+  open();
 }
 
 // Return the global Alpine store.

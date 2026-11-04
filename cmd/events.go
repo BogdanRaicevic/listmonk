@@ -25,6 +25,14 @@ func (a *App) EventStream(c *echo.Context) error {
 		log.Fatalf("error subscribing to events: %v", err)
 	}
 
+	// Send the headers right away so that the client sees the stream as open
+	// instead of a pending request until the first event arrives.
+	c.Response().WriteHeader(http.StatusOK)
+	if err := http.NewResponseController(c.Response()).Flush(); err != nil {
+		a.events.Unsubscribe(id)
+		return err
+	}
+
 	ctx := c.Request().Context()
 	for {
 		select {
