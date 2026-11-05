@@ -90,6 +90,31 @@
 						{{- template "empty-state" }}
 					{{- end }}
 				</article>
+
+				{{- if $d.Audiences }}
+					<article class="card float" data-testid="campaign-audiences">
+						<h4 class="title">{{ .L.T "analytics.audiences" }}</h4>
+						<p class="text-lighter text-8">{{ .L.T "analytics.audiencesHelp" }}</p>
+						{{- if not $d.IndividualTracking }}
+							<p role="alert" data-variant="warning" class="text-8">{{ .L.T "analytics.audiencesNeedTracking" }}</p>
+						{{- end }}
+						<table>
+							<tbody>
+								{{- range $d.Audiences }}
+									<tr>
+										<td>#{{ .ID }}: {{ .Name }}</td>
+										<td class="hstack text-8">
+											<a href="{{ URI "/admin/subscribers" }}?query={{ .Opened }}" data-testid="audience-opened">{{ $.L.T "analytics.opened" }}</a>
+											<a href="{{ URI "/admin/subscribers" }}?query={{ .NotOpened }}" data-testid="audience-not-opened">{{ $.L.T "analytics.notOpened" }}</a>
+											<a href="{{ URI "/admin/subscribers" }}?query={{ .Clicked }}" data-testid="audience-clicked">{{ $.L.T "analytics.clicked" }}</a>
+											<a href="{{ URI "/admin/subscribers" }}?query={{ .NotClicked }}" data-testid="audience-not-clicked">{{ $.L.T "analytics.notClicked" }}</a>
+										</td>
+									</tr>
+								{{- end }}
+							</tbody>
+						</table>
+					</article>
+				{{- end }}
 			{{- end }}
 		{{- end }}
 	</div>
