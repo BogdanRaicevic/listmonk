@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"regexp"
 	"strings"
@@ -52,9 +53,15 @@ type sesMail struct {
 	Bounce    struct {
 		BounceType        string `json:"bounceType"`
 		BouncedRecipients []struct {
-			Status string `json:"status"`
+			EmailAddress string `json:"emailAddress"`
+			Status       string `json:"status"`
 		} `json:"bouncedRecipients"`
 	} `json:"bounce"`
+	Complaint struct {
+		ComplainedRecipients []struct {
+			EmailAddress string `json:"emailAddress"`
+		} `json:"complainedRecipients"`
+	} `json:"complaint"`
 	Mail struct {
 		Timestamp        sesTimestamp        `json:"timestamp"`
 		HeadersTruncated bool                `json:"headersTruncated"`
@@ -175,13 +182,33 @@ func (s *SES) ProcessBounce(b []byte) (models.Bounce, error) {
 	}
 
 	return models.Bounce{
-		Email:        strings.ToLower(m.Mail.Destination[0]),
+		Email:        sesRecipient(m),
 		CampaignUUID: campUUID,
 		Type:         typ,
 		Source:       "ses",
 		Meta:         json.RawMessage(n.Message),
 		CreatedAt:    time.Time(m.Mail.Timestamp),
 	}, nil
+}
+
+// sesRecipient returns the bare, lowercased e-mail address of the recipient a
+// notification is about. It prefers the bounced/complained recipient over
+// mail.destination, which holds the original To header and may carry a
+// display name (eg: `"Jane Doe" <jane@example.com>`) that would not match any
+// subscriber's e-mail.
+func sesRecipient(m sesMail) string {
+	addr := m.Mail.Destination[0]
+	if len(m.Bounce.BouncedRecipients) > 0 && m.Bounce.BouncedRecipients[0].EmailAddress != "" {
+		addr = m.Bounce.BouncedRecipients[0].EmailAddress
+	} else if len(m.Complaint.ComplainedRecipients) > 0 && m.Complaint.ComplainedRecipients[0].EmailAddress != "" {
+		addr = m.Complaint.ComplainedRecipients[0].EmailAddress
+	}
+
+	if a, err := mail.ParseAddress(addr); err == nil {
+		addr = a.Address
+	}
+
+	return strings.ToLower(strings.TrimSpace(addr))
 }
 
 func (s *SES) buildSignature(n sesNotif) []byte {
