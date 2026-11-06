@@ -36,6 +36,10 @@ type analyticsView struct {
 	IndividualTracking    bool
 	ShowUnique            bool
 
+	// Audiences are per-campaign engagement segments (opened / not opened /
+	// clicked / not clicked) linked to the subscribers page for export.
+	Audiences []campaignAudience
+
 	HasData bool
 	Counts  struct {
 		Subscriptions   int
@@ -106,6 +110,20 @@ func (a *App) viewAnalytics(c *echo.Context, resource string) error {
 
 	if data.Interval == "" {
 		data.Interval = models.AnalyticsIntervalDay
+	}
+
+	// Engagement segments link to the subscribers page with an advanced query,
+	// which requires the SQL query permission. They are only meaningful with
+	// individual tracking on; the template shows a notice otherwise.
+	if resource == models.ResourceCampaigns && data.Can(auth.PermSubscribersSqlQuery) {
+		for _, item := range items {
+			aud := newCampaignAudience(item.ID, item.Name)
+			if err := countAudience(a.db, &aud); err != nil {
+				a.log.Printf("error counting campaign audience: %v", err)
+				return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.errorFetching", "name", "audiences", "error", err.Error()))
+			}
+			data.Audiences = append(data.Audiences, aud)
+		}
 	}
 
 	// Pull analytics for the selected campaigns or lists.

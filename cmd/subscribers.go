@@ -499,6 +499,11 @@ func (a *App) ExportSubscribers(c *echo.Context) error {
 		return err
 	}
 
+	// Fork: slim export (email, name, firma) used by campaign audience downloads.
+	if c.QueryParam("columns") == "slim" {
+		return a.exportSubscribersSlim(c, exp)
+	}
+
 	var (
 		hdr = c.Response().Header()
 		wr  = csv.NewWriter(c.Response())

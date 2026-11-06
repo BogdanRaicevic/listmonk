@@ -90,6 +90,43 @@
 						{{- template "empty-state" }}
 					{{- end }}
 				</article>
+
+				{{- if $d.Audiences }}
+					<article class="card float" data-testid="campaign-audiences">
+						<h4 class="title">{{ .L.T "analytics.audiences" }}</h4>
+						<p class="text-lighter text-8">{{ .L.T "analytics.audiencesHelp" }} {{ .L.T "analytics.audiencesUnsubHelp" }}</p>
+						{{- if not $d.IndividualTracking }}
+							<p role="alert" data-variant="warning" class="text-8">{{ .L.T "analytics.audiencesNeedTracking" }}</p>
+						{{- end }}
+						<div class="table-wrapper">
+						<table>
+							<thead>
+								<tr>
+									<th>{{ .L.Tc "globals.terms.campaign" 1 }}</th>
+									{{- range (index $d.Audiences 0).Segments }}
+										<th>{{ $.L.T .Label }}</th>
+									{{- end }}
+								</tr>
+							</thead>
+							<tbody>
+								{{- range $aud := $d.Audiences }}
+									<tr>
+										<td>#{{ $aud.ID }}: {{ $aud.Name }}</td>
+										{{- range $aud.Segments }}
+											<td data-testid="audience-{{ .Key }}" style="white-space: nowrap">
+												<a href="{{ URI "/admin/subscribers" }}?query={{ .Query }}" data-testid="audience-view" title="{{ $.L.T "globals.buttons.view" }}">{{ FormatNumber .Count }}</a>
+												{{- if gt .Count 0 }}
+													<a href="{{ URI "/api/subscribers/export" }}?columns=slim&amp;query={{ .Query }}" download="campaign-{{ $aud.ID }}-{{ .Key }}.csv" data-testid="audience-download" title="{{ $.L.T "globals.buttons.export" }}" aria-label="{{ $.L.T "globals.buttons.export" }}: {{ $.L.T .Label }}">{{ Icon "download-cloud" }}</a>
+												{{- end }}
+											</td>
+										{{- end }}
+									</tr>
+								{{- end }}
+							</tbody>
+						</table>
+						</div>
+					</article>
+				{{- end }}
 			{{- end }}
 		{{- end }}
 	</div>
