@@ -242,10 +242,15 @@ function groupCounts(rows, idKey) {
 }
 
 // Render per-item time series and totals, with optional unsubscription lines.
-function renderCounts(key, items, rows, unsubscriptions) {
+// showRate shows each total as a percentage of the campaign's sent count. Only
+// use it for counts that are at most one per subscriber (unique views/clicks,
+// bounces). Total views and clicks include repeats, so a "% of sent" on them
+// is not a rate and can exceed 100%.
+function renderCounts(key, items, rows, unsubscriptions, showRate = false) {
   const idKey = window._analyticsResource === 'lists' ? 'list_id' : 'campaign_id';
   const counts = groupCounts(rows, idKey);
   const unsubs = groupCounts(unsubscriptions || [], idKey);
+  const sent = items.map((c) => (showRate ? c.sent : 0));
   const datasets = items.map((c, n) => ({
     label: `#${c.id}: ${c.name}`,
     data: counts.get(c.id)?.points || [],
@@ -289,7 +294,7 @@ function renderCounts(key, items, rows, unsubscriptions) {
     labels,
     datasets: [{
       data: totals,
-      sent: items.map((c) => c.sent),
+      sent,
       backgroundColor: chartColors,
       borderWidth: 6,
     }],
@@ -300,7 +305,7 @@ function renderCounts(key, items, rows, unsubscriptions) {
     legend.querySelectorAll('[data-index]').forEach((item) => {
       const n = Number(item.dataset.index);
       item.querySelector('[data-marker]').style.color = datasets[n].borderColor;
-      item.querySelector('[data-count]').textContent = formatCount(totals[n], items[n].sent);
+      item.querySelector('[data-count]').textContent = formatCount(totals[n], sent[n]);
       const unsubCount = item.querySelector('[data-unsubscription-count]');
       if (unsubCount) {
         unsubCount.textContent = unsubs.get(items[n].id)?.total || 0;
@@ -359,14 +364,14 @@ function renderCharts() {
   renderCounts('clicks', camps, d.clicks || []);
 
   if (d.unique_views) {
-    renderCounts('unique_views', camps, d.unique_views);
+    renderCounts('unique_views', camps, d.unique_views, null, true);
   }
 
   if (d.unique_clicks) {
-    renderCounts('unique_clicks', camps, d.unique_clicks);
+    renderCounts('unique_clicks', camps, d.unique_clicks, null, true);
   }
 
-  renderCounts('bounces', camps, d.bounces || []);
+  renderCounts('bounces', camps, d.bounces || [], null, true);
   renderLinks(d.links || []);
 }
 
