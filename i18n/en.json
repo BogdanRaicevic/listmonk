@@ -4,7 +4,7 @@
     "_.date_long": "January 02, 2006",
     "_.date_short": "Mon, 02 Jan 2006",
     "analytics.audiences": "Audiences",
-    "analytics.audiencesHelp": "Open the subscribers who opened or clicked each campaign, or who received it and did not. Use Export on the subscribers page to download them.",
+    "analytics.audiencesHelp": "Subscribers of each campaign by engagement. Click a number to see them on the subscribers page, or the download icon to export them as CSV.",
     "analytics.audiencesUnsubHelp": "Unsubscribes are matched by time: subscriptions to the campaign's lists that were unsubscribed after it started.",
     "analytics.audiencesNeedTracking": "Individual subscriber tracking is off (Settings → Privacy), so views and clicks are not linked to subscribers and these segments will be empty or incomplete.",
     "analytics.bounced": "Bounced",

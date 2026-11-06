@@ -1,19 +1,26 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
 
-// campaignAudience holds subscriber-page SQL filters that segment a campaign's
-// recipients by engagement, for exporting or retargeting via the subscribers page.
+	"github.com/jmoiron/sqlx"
+)
+
+// audienceSegment is one engagement segment of a campaign's recipients. Query is
+// an advanced-query expression for the subscribers page and its CSV export.
+type audienceSegment struct {
+	Key   string // eg: not-opened. Used in test IDs and download file names.
+	Label string // i18n key.
+	Query string
+	Count int
+}
+
+// campaignAudience holds the segments of a single campaign.
 type campaignAudience struct {
-	ID         int
-	Name       string
-	Opened     string
-	NotOpened  string
-	Clicked    string
-	NotClicked string
-	Bounced    string
-	UnsubList  string
-	UnsubAll   string
+	ID       int
+	Name     string
+	Segments []audienceSegment
 }
 
 // campaignSentExp matches subscribers who were on the campaign's lists when it
@@ -44,7 +51,7 @@ const (
 	subUnsubAfterCond = `(sl.status = 'unsubscribed' AND sl.updated_at >= c.started_at)`
 )
 
-// newCampaignAudience returns the engagement segment queries for a campaign.
+// newCampaignAudience returns the engagement segments of a campaign (without counts).
 func newCampaignAudience(id int, name string) campaignAudience {
 	var (
 		viewed    = fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM campaign_views WHERE campaign_id = %d AND subscriber_id IS NOT NULL)`, id)
@@ -55,20 +62,38 @@ func newCampaignAudience(id int, name string) campaignAudience {
 	)
 
 	return campaignAudience{
-		ID:         id,
-		Name:       name,
-		Opened:     viewed,
-		NotOpened:  recipient + " AND NOT (" + viewed + ")",
-		Clicked:    clicked,
-		NotClicked: recipient + " AND NOT (" + clicked + ")",
-		Bounced:    bounced,
+		ID:   id,
+		Name: name,
+		Segments: []audienceSegment{
+			{Key: "opened", Label: "analytics.opened", Query: viewed},
+			{Key: "not-opened", Label: "analytics.notOpened", Query: recipient + " AND NOT (" + viewed + ")"},
+			{Key: "clicked", Label: "analytics.clicked", Query: clicked},
+			{Key: "not-clicked", Label: "analytics.notClicked", Query: recipient + " AND NOT (" + clicked + ")"},
+			{Key: "bounced", Label: "analytics.bounced", Query: bounced},
 
-		// Unsubscribed from the campaign's list(s) only.
-		UnsubList: `subscribers.status != 'blocklisted' AND ` + unsubbed,
+			// Unsubscribed from the campaign's list(s) only.
+			{Key: "unsub-list", Label: "analytics.unsubList", Query: `subscribers.status != 'blocklisted' AND ` + unsubbed},
 
-		// "Unsubscribe from all" blocklists the subscriber and unsubscribes every
-		// list. Exclude those who bounced on this campaign, as bounce actions can
-		// also blocklist.
-		UnsubAll: `subscribers.status = 'blocklisted' AND ` + unsubbed + " AND NOT (" + bounced + ")",
+			// "Unsubscribe from all" blocklists the subscriber and unsubscribes every
+			// list. Exclude those who bounced on this campaign, as bounce actions can
+			// also blocklist.
+			{Key: "unsub-all", Label: "analytics.unsubAll", Query: `subscribers.status = 'blocklisted' AND ` + unsubbed + " AND NOT (" + bounced + ")"},
+		},
 	}
+}
+
+// countAudience fills in the subscriber count of each segment with a single query.
+// The expressions are built above from the integer campaign ID only.
+func countAudience(db *sqlx.DB, a *campaignAudience) error {
+	cols := make([]string, len(a.Segments))
+	for i, s := range a.Segments {
+		cols[i] = "COUNT(*) FILTER (WHERE " + s.Query + ")"
+	}
+
+	dest := make([]any, len(a.Segments))
+	for i := range a.Segments {
+		dest[i] = &a.Segments[i].Count
+	}
+
+	return db.QueryRow("SELECT " + strings.Join(cols, ", ") + " FROM subscribers").Scan(dest...)
 }

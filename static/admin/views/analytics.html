@@ -98,24 +98,33 @@
 						{{- if not $d.IndividualTracking }}
 							<p role="alert" data-variant="warning" class="text-8">{{ .L.T "analytics.audiencesNeedTracking" }}</p>
 						{{- end }}
+						<div class="table-wrapper">
 						<table>
+							<thead>
+								<tr>
+									<th>{{ .L.Tc "globals.terms.campaign" 1 }}</th>
+									{{- range (index $d.Audiences 0).Segments }}
+										<th>{{ $.L.T .Label }}</th>
+									{{- end }}
+								</tr>
+							</thead>
 							<tbody>
-								{{- range $d.Audiences }}
+								{{- range $aud := $d.Audiences }}
 									<tr>
-										<td>#{{ .ID }}: {{ .Name }}</td>
-										<td class="hstack text-8">
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .Opened }}" data-testid="audience-opened">{{ $.L.T "analytics.opened" }}</a>
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .NotOpened }}" data-testid="audience-not-opened">{{ $.L.T "analytics.notOpened" }}</a>
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .Clicked }}" data-testid="audience-clicked">{{ $.L.T "analytics.clicked" }}</a>
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .NotClicked }}" data-testid="audience-not-clicked">{{ $.L.T "analytics.notClicked" }}</a>
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .Bounced }}" data-testid="audience-bounced">{{ $.L.T "analytics.bounced" }}</a>
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .UnsubList }}" data-testid="audience-unsub-list">{{ $.L.T "analytics.unsubList" }}</a>
-											<a href="{{ URI "/admin/subscribers" }}?query={{ .UnsubAll }}" data-testid="audience-unsub-all">{{ $.L.T "analytics.unsubAll" }}</a>
-										</td>
+										<td>#{{ $aud.ID }}: {{ $aud.Name }}</td>
+										{{- range $aud.Segments }}
+											<td data-testid="audience-{{ .Key }}" style="white-space: nowrap">
+												<a href="{{ URI "/admin/subscribers" }}?query={{ .Query }}" data-testid="audience-view" title="{{ $.L.T "globals.buttons.view" }}">{{ FormatNumber .Count }}</a>
+												{{- if gt .Count 0 }}
+													<a href="{{ URI "/api/subscribers/export" }}?query={{ .Query }}" download="campaign-{{ $aud.ID }}-{{ .Key }}.csv" data-testid="audience-download" title="{{ $.L.T "globals.buttons.export" }}" aria-label="{{ $.L.T "globals.buttons.export" }}: {{ $.L.T .Label }}">{{ Icon "download-cloud" }}</a>
+												{{- end }}
+											</td>
+										{{- end }}
 									</tr>
 								{{- end }}
 							</tbody>
 						</table>
+						</div>
 					</article>
 				{{- end }}
 			{{- end }}
