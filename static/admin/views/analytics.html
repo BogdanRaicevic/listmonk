@@ -116,7 +116,7 @@
 											<td data-testid="audience-{{ .Key }}" style="white-space: nowrap">
 												<a href="{{ URI "/admin/subscribers" }}?query={{ .Query }}" data-testid="audience-view" title="{{ $.L.T "globals.buttons.view" }}">{{ FormatNumber .Count }}</a>
 												{{- if gt .Count 0 }}
-													<a href="{{ URI "/api/subscribers/export" }}?query={{ .Query }}" download="campaign-{{ $aud.ID }}-{{ .Key }}.csv" data-testid="audience-download" title="{{ $.L.T "globals.buttons.export" }}" aria-label="{{ $.L.T "globals.buttons.export" }}: {{ $.L.T .Label }}">{{ Icon "download-cloud" }}</a>
+													<a href="{{ URI "/api/subscribers/export" }}?columns=slim&amp;query={{ .Query }}" download="campaign-{{ $aud.ID }}-{{ .Key }}.csv" data-testid="audience-download" title="{{ $.L.T "globals.buttons.export" }}" aria-label="{{ $.L.T "globals.buttons.export" }}: {{ $.L.T .Label }}">{{ Icon "download-cloud" }}</a>
 												{{- end }}
 											</td>
 										{{- end }}

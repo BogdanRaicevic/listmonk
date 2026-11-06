@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/knadh/listmonk/models"
+	"github.com/labstack/echo/v5"
 )
 
 // audienceSegment is one engagement segment of a campaign's recipients. Query is
@@ -96,4 +100,77 @@ func countAudience(db *sqlx.DB, a *campaignAudience) error {
 	}
 
 	return db.QueryRow("SELECT " + strings.Join(cols, ", ") + " FROM subscribers").Scan(dest...)
+}
+
+// exportSubscribersSlim writes a subscriber export with only the columns needed
+// for retargeting: email, plus name and the `firma` attribute when at least one
+// exported subscriber has a value for them. Rows are collected first so that
+// empty optional columns can be left out of the header.
+func (a *App) exportSubscribersSlim(c *echo.Context, exp func() ([]models.SubscriberExport, error)) error {
+	type row struct{ email, name, firma string }
+
+	var (
+		rows     []row
+		hasName  bool
+		hasFirma bool
+	)
+	for {
+		out, err := exp()
+		if err != nil {
+			return err
+		}
+		if len(out) == 0 {
+			break
+		}
+
+		for _, r := range out {
+			var attr struct {
+				Firma any `json:"firma"`
+			}
+			_ = json.Unmarshal([]byte(r.Attribs), &attr)
+
+			firma := ""
+			if attr.Firma != nil {
+				firma = strings.TrimSpace(fmt.Sprint(attr.Firma))
+			}
+
+			hasName = hasName || strings.TrimSpace(r.Name) != ""
+			hasFirma = hasFirma || firma != ""
+			rows = append(rows, row{email: r.Email, name: r.Name, firma: firma})
+		}
+	}
+
+	hdr := c.Response().Header()
+	hdr.Set(echo.HeaderContentType, "text/csv; charset=utf-8")
+	hdr.Set(echo.HeaderContentDisposition, "attachment; filename=subscribers.csv")
+	hdr.Set(echo.HeaderCacheControl, "no-cache")
+
+	cols := []string{"email"}
+	if hasName {
+		cols = append(cols, "name")
+	}
+	if hasFirma {
+		cols = append(cols, "firma")
+	}
+
+	wr := csv.NewWriter(c.Response())
+	if err := wr.Write(cols); err != nil {
+		return err
+	}
+	for _, r := range rows {
+		rec := []string{r.email}
+		if hasName {
+			rec = append(rec, r.name)
+		}
+		if hasFirma {
+			rec = append(rec, r.firma)
+		}
+		if err := wr.Write(rec); err != nil {
+			a.log.Printf("error streaming slim CSV export: %v", err)
+			break
+		}
+	}
+	wr.Flush()
+
+	return wr.Error()
 }
