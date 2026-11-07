@@ -4,11 +4,9 @@ package main
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/models"
 	"github.com/labstack/echo/v5"
 	"github.com/lib/pq"
 )
@@ -69,22 +67,11 @@ func (a *App) getCampaignMessageCounts(campID int) (campaignMessageCounts, error
 // resent right away. The retry worker resends them to those who should still get
 // the campaign.
 func (a *App) ResendCampaignFailed(c *echo.Context) error {
-	user := auth.GetUser(c)
-
-	id, _ := strconv.Atoi(c.Param("id"))
-	if id < 1 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-	}
+	id := getID(c)
 
 	// The user must be able to manage the campaign.
-	getAll, permittedLists := user.GetPermittedLists(auth.PermTypeManage)
-	getAll = getAll || user.HasPerm(auth.PermCampaignsManageAll)
-	items, err := a.core.GetAnalyticsItems(models.ResourceCampaigns, []int{id}, getAll, permittedLists)
-	if err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
 		return err
-	}
-	if len(items) == 0 {
-		return echo.NewHTTPError(http.StatusNotFound, a.i18n.Ts("globals.messages.notFound", "name", "campaign"))
 	}
 
 	var n int
