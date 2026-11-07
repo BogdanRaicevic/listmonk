@@ -42,7 +42,11 @@ LIMIT 200;
 
 -- name: has-campaign-messages
 -- Whether a campaign has any logged e-mails, ie: was sent with the message log on.
-SELECT EXISTS (SELECT 1 FROM campaign_messages WHERE campaign_id = $1);
+-- The ORDER BY on the primary key keeps it an index probe: with a plain EXISTS,
+-- the prepared statement's generic plan seq-scans the whole table.
+SELECT COUNT(*) > 0 FROM (
+    SELECT 1 FROM campaign_messages WHERE campaign_id = $1 ORDER BY campaign_id, subscriber_id LIMIT 1
+) x;
 
 -- name: claim-campaign-retries
 -- Claims up to $1 failed campaign e-mails whose retry is due, for finished
