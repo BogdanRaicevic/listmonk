@@ -122,6 +122,11 @@ func (m *Manager) runRetries() {
 
 // processRetries resends one batch of due retries and returns how many it claimed.
 func (m *Manager) processRetries() (int, error) {
+	// Don't resend while the sliding window limit is pausing sends.
+	if m.SlidingWindowWait() {
+		return 0, nil
+	}
+
 	targets, err := m.store.ClaimCampaignRetries(retryBatchSize)
 	if err != nil || len(targets) == 0 {
 		return 0, err
