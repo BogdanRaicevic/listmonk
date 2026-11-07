@@ -384,8 +384,7 @@ function campaignAudiences() {
         return;
       }
       await api('campaigns', `/campaigns/${id}/resend-failed`, 'POST');
-      u.toast(doneMsg);
-      window.setTimeout(() => window.location.reload(), 1500);
+      u.reload({ message: doneMsg });
     },
   };
 }
