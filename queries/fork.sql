@@ -91,12 +91,14 @@ ORDER BY claimed.campaign_id, s.id;
 UPDATE campaign_messages SET retry_at = NULL, updated_at = NOW() WHERE campaign_id = $1 AND subscriber_id = $2;
 
 -- name: schedule-campaign-resend
--- Schedules all failed e-mails of a finished campaign to be resent now. Returns
--- how many were scheduled.
+-- Schedules the failed e-mails of a finished campaign to be resent now. Returns
+-- how many were scheduled. Rows with a future retry_at are left alone: they're
+-- being resent right now (claimed) or will be retried automatically anyway.
 WITH upd AS (
     UPDATE campaign_messages cm SET retry_at = NOW()
     FROM campaigns c
     WHERE c.id = cm.campaign_id AND cm.campaign_id = $1 AND cm.status = 'failed' AND c.status = 'finished'
+        AND (cm.retry_at IS NULL OR cm.retry_at <= NOW())
     RETURNING 1
 )
 SELECT COUNT(*) FROM upd;
