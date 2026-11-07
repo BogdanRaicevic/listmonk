@@ -103,7 +103,7 @@ SELECT COUNT(*) FROM upd;
 SELECT COUNT(*) FILTER (WHERE status = 'failed') AS failed,
        COUNT(*) FILTER (WHERE status = 'uncertain') AS uncertain,
        COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying
-FROM campaign_messages WHERE campaign_id = $1;
+FROM campaign_messages WHERE campaign_id = $1 AND status != 'sent';
 
 -- name: apply-complaint-to-email-variants
 -- Applies a complaint's bounce action to every subscriber whose address reaches
