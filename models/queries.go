@@ -155,6 +155,10 @@ type Queries struct {
 	RecordCampaignMessages       *sqlx.Stmt `query:"record-campaign-messages"`
 	GetSubscriberCampaignMessage *sqlx.Stmt `query:"get-subscriber-campaign-messages"`
 	HasCampaignMessages          *sqlx.Stmt `query:"has-campaign-messages"`
+	ClaimCampaignRetries         *sqlx.Stmt `query:"claim-campaign-retries"`
+	ClearCampaignRetry           *sqlx.Stmt `query:"clear-campaign-retry"`
+	ScheduleCampaignResend       *sqlx.Stmt `query:"schedule-campaign-resend"`
+	GetCampaignMessageCounts     *sqlx.Stmt `query:"get-campaign-message-counts"`
 }
 
 // ApplyOrphanFilter handles the special subscription_status value "none", which

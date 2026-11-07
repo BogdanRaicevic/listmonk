@@ -18,6 +18,10 @@ type audienceSegment struct {
 	Label string // i18n key.
 	Query string
 	Count int
+
+	// Unavailable segments can't be computed for the campaign (eg: "not sent"
+	// for campaigns sent before the message log) and are shown as a dash.
+	Unavailable bool
 }
 
 // campaignAudience holds the segments of a single campaign.
@@ -29,6 +33,11 @@ type campaignAudience struct {
 	// Exact is true when recipients come from the campaign message log rather
 	// than being estimated from list memberships (campaigns sent before the log).
 	Exact bool
+
+	// Retrying is how many of the campaign's failed e-mails await an automatic
+	// retry, and CanResend whether the user may resend the failed ones.
+	Retrying  int
+	CanResend bool
 }
 
 // campaignSentExp matches subscribers who were on the campaign's lists when it
@@ -92,6 +101,9 @@ func newCampaignAudience(id int, name string, exact bool) campaignAudience {
 		Name:  name,
 		Exact: exact,
 		Segments: []audienceSegment{
+			// E-mails that failed (or may not have been delivered), from the message log.
+			{Key: "not-sent", Label: "analytics.notSent", Unavailable: !exact,
+				Query: fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM campaign_messages WHERE campaign_id = %d AND status != 'sent')`, id)},
 			{Key: "opened", Label: "analytics.opened", Query: viewed},
 			{Key: "not-opened", Label: "analytics.notOpened", Query: recipient + " AND NOT (" + viewed + ")"},
 			{Key: "clicked", Label: "analytics.clicked", Query: clicked},
@@ -114,6 +126,10 @@ func newCampaignAudience(id int, name string, exact bool) campaignAudience {
 func countAudience(db *sqlx.DB, a *campaignAudience) error {
 	cols := make([]string, len(a.Segments))
 	for i, s := range a.Segments {
+		if s.Unavailable {
+			cols[i] = "0"
+			continue
+		}
 		cols[i] = "COUNT(*) FILTER (WHERE " + s.Query + ")"
 	}
 

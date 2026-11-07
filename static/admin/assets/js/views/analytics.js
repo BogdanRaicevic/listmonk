@@ -2,6 +2,7 @@ import Alpine from 'alpinejs';
 import Chart from 'chart.js/auto';
 
 import { api } from '../main.js';
+import * as u from '../utils.js';
 import { tagAutocomplete, tagNode } from '../tag-selector.js';
 
 const chartColorRed = '#ee7d5b';
@@ -375,8 +376,23 @@ function renderCharts() {
   renderLinks(d.links || []);
 }
 
+// Fork: campaign audiences card (resend failed e-mails).
+function campaignAudiences() {
+  return {
+    async onResend(id, confirmMsg, doneMsg) {
+      if (!(await u.confirm(confirmMsg))) {
+        return;
+      }
+      await api('campaigns', `/campaigns/${id}/resend-failed`, 'POST');
+      u.toast(doneMsg);
+      window.setTimeout(() => window.location.reload(), 1500);
+    },
+  };
+}
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('analyticsForm', analyticsForm);
+  Alpine.data('campaignAudiences', campaignAudiences);
 }, { once: true });
 
 renderCharts();

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/gofrs/uuid/v5"
 	"github.com/knadh/listmonk/internal/core"
 	"github.com/knadh/listmonk/internal/manager"
@@ -202,6 +204,25 @@ func (s *store) RecordCampaignMessages(logs []manager.MessageLog) error {
 		errs[i] = l.Error
 	}
 
-	_, err := s.queries.RecordCampaignMessages.Exec(campIDs, subIDs, status, errs)
+	temp := make(pq.BoolArray, len(logs))
+	for i, l := range logs {
+		temp[i] = l.Temporary
+	}
+
+	_, err := s.queries.RecordCampaignMessages.Exec(campIDs, subIDs, status, errs, temp,
+		fmt.Sprintf("%d seconds", int(manager.RetryBackoff.Seconds())), manager.RetryMaxAttempts)
+	return err
+}
+
+// ClaimCampaignRetries claims failed campaign e-mails whose retry is due (fork).
+func (s *store) ClaimCampaignRetries(limit int) ([]manager.RetryTarget, error) {
+	var out []manager.RetryTarget
+	err := s.queries.ClaimCampaignRetries.Select(&out, limit)
+	return out, err
+}
+
+// ClearCampaignRetry cancels a scheduled retry of a campaign e-mail (fork).
+func (s *store) ClearCampaignRetry(campID, subID int) error {
+	_, err := s.queries.ClearCampaignRetry.Exec(campID, subID)
 	return err
 }

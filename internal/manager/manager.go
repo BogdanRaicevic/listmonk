@@ -61,8 +61,10 @@ type Store interface {
 	BlocklistSubscriber(id int64) error
 	DeleteSubscriber(id int64) error
 
-	// Fork: campaign message log.
+	// Fork: campaign message log and retries.
 	RecordCampaignMessages(logs []MessageLog) error
+	ClaimCampaignRetries(limit int) ([]RetryTarget, error)
+	ClearCampaignRetry(campID, subID int) error
 }
 
 // Messenger is an interface for a generic messaging backend,
@@ -308,6 +310,11 @@ func (m *Manager) Run() {
 		go m.worker()
 	}
 
+	// Fork: resend failed campaign e-mails whose retry is due.
+	if m.cfg.ScanCampaigns {
+		go m.runRetries()
+	}
+
 	// Indefinitely wait on the pipe queue to fetch the next set of subscribers
 	// for any active campaigns.
 	for p := range m.nextPipes {
@@ -539,41 +546,8 @@ func (m *Manager) worker() {
 			}
 			numMsg++
 
-			// Outgoing message.
-			out := models.Message{
-				From:        msg.from,
-				To:          []string{msg.to},
-				Subject:     msg.subject,
-				ContentType: msg.Campaign.ContentType,
-				Body:        msg.body,
-				AltBody:     msg.altBody,
-				Subscriber:  msg.Subscriber,
-				Campaign:    msg.Campaign,
-				Attachments: msg.Campaign.Attachments,
-			}
-
-			h := textproto.MIMEHeader{}
-			h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.UUID)
-			h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.UUID)
-
-			// Attach List-Unsubscribe headers?
-			if m.cfg.UnsubHeader {
-				h.Set("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
-				h.Set("List-Unsubscribe", `<`+msg.unsubURL+`>`)
-			}
-
-			// Attach any custom headers.
-			for _, set := range msg.headers {
-				for hdr, val := range set {
-					h.Add(hdr, val)
-				}
-			}
-
-			// Set the headers.
-			out.Headers = h
-
 			// Push the message to the messenger.
-			err := m.messengers[msg.Campaign.Messenger].Push(out)
+			err := m.messengers[msg.Campaign.Messenger].Push(m.campaignMessageOut(msg))
 			if err != nil {
 				m.log.Printf("error sending message in campaign %s: subscriber %d: %v", msg.Campaign.Name, msg.Subscriber.ID, err)
 			}
@@ -613,6 +587,44 @@ func (m *Manager) worker() {
 			}
 		}
 	}
+}
+
+// campaignMessageOut builds the outgoing message for a campaign message.
+func (m *Manager) campaignMessageOut(msg CampaignMessage) models.Message {
+	// Outgoing message.
+	out := models.Message{
+		From:        msg.from,
+		To:          []string{msg.to},
+		Subject:     msg.subject,
+		ContentType: msg.Campaign.ContentType,
+		Body:        msg.body,
+		AltBody:     msg.altBody,
+		Subscriber:  msg.Subscriber,
+		Campaign:    msg.Campaign,
+		Attachments: msg.Campaign.Attachments,
+	}
+
+	h := textproto.MIMEHeader{}
+	h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.UUID)
+	h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.UUID)
+
+	// Attach List-Unsubscribe headers?
+	if m.cfg.UnsubHeader {
+		h.Set("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
+		h.Set("List-Unsubscribe", `<`+msg.unsubURL+`>`)
+	}
+
+	// Attach any custom headers.
+	for _, set := range msg.headers {
+		for hdr, val := range set {
+			h.Add(hdr, val)
+		}
+	}
+
+	// Set the headers.
+	out.Headers = h
+
+	return out
 }
 
 // nextCampaigns fetches new campaigns while updating stats.

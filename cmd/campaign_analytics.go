@@ -118,6 +118,14 @@ func (a *App) viewAnalytics(c *echo.Context, resource string) error {
 	if resource == models.ResourceCampaigns && data.Can(auth.PermSubscribersSqlQuery) {
 		for _, item := range items {
 			aud := newCampaignAudience(item.ID, item.Name, a.hasCampaignMessages(item.ID))
+			if aud.Exact {
+				mc, err := a.getCampaignMessageCounts(item.ID)
+				if err != nil {
+					a.log.Printf("error counting campaign messages: %v", err)
+				}
+				aud.Retrying = mc.Retrying
+				aud.CanResend = mc.NotSent > mc.Retrying && data.Can(auth.PermCampaignsManage, auth.PermCampaignsManageAll)
+			}
 			if err := countAudience(a.db, &aud); err != nil {
 				a.log.Printf("error counting campaign audience: %v", err)
 				return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.errorFetching", "name", "audiences", "error", err.Error()))

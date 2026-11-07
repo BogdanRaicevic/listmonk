@@ -3,8 +3,13 @@ package main
 // Fork: per-subscriber campaign message log (campaign_messages).
 
 import (
+	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/knadh/listmonk/internal/auth"
+	"github.com/knadh/listmonk/models"
+	"github.com/labstack/echo/v5"
 	"github.com/lib/pq"
 )
 
@@ -41,4 +46,50 @@ func (a *App) hasCampaignMessages(campID int) bool {
 		return false
 	}
 	return has
+}
+
+// campaignMessageCounts is the summary of a campaign's logged e-mails that
+// weren't sent.
+type campaignMessageCounts struct {
+	NotSent  int `db:"not_sent"`
+	Retrying int `db:"retrying"`
+}
+
+// getCampaignMessageCounts returns how many of a campaign's e-mails weren't sent
+// and how many of those are waiting for a retry.
+func (a *App) getCampaignMessageCounts(campID int) (campaignMessageCounts, error) {
+	var out campaignMessageCounts
+	err := a.queries.GetCampaignMessageCounts.Get(&out, campID)
+	return out, err
+}
+
+// ResendCampaignFailed schedules all failed e-mails of a finished campaign to be
+// resent right away. The retry worker resends them to those who should still get
+// the campaign.
+func (a *App) ResendCampaignFailed(c *echo.Context) error {
+	user := auth.GetUser(c)
+
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id < 1 {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+	}
+
+	// The user must be able to manage the campaign.
+	getAll, permittedLists := user.GetPermittedLists(auth.PermTypeManage)
+	getAll = getAll || user.HasPerm(auth.PermCampaignsManageAll)
+	items, err := a.core.GetAnalyticsItems(models.ResourceCampaigns, []int{id}, getAll, permittedLists)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, a.i18n.Ts("globals.messages.notFound", "name", "campaign"))
+	}
+
+	var n int
+	if err := a.queries.ScheduleCampaignResend.Get(&n, id); err != nil {
+		a.log.Printf("error scheduling campaign resend: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.errorUpdating", "name", "campaign", "error", err.Error()))
+	}
+
+	return c.JSON(http.StatusOK, okResp{map[string]int{"scheduled": n}})
 }
