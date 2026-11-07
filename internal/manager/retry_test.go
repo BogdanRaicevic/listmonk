@@ -23,6 +23,7 @@ func TestIsTemporarySendErr(t *testing.T) {
 		{"dial refused", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connect: connection refused")}, true},
 		{"DNS lookup failed", &net.OpError{Op: "dial", Err: &net.DNSError{Err: "no such host", Name: "smtp.example.com"}}, true},
 		{"no SMTP servers", errors.New(`no SMTP servers available for messenger "email"`), true},
+		{"pool wait timeout", errors.New("timed out waiting for free conn in pool"), true},
 		// The connection broke after the e-mail may have been handed over:
 		// never retried automatically.
 		{"write broke mid-send", &net.OpError{Op: "write", Net: "tcp", Err: errors.New("broken pipe")}, false},
