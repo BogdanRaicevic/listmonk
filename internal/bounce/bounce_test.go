@@ -2,10 +2,15 @@ package bounce
 
 import (
 	"errors"
+	"io"
+	"log"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/knadh/listmonk/models"
+	"github.com/labstack/echo/v5"
+	"github.com/lib/pq"
 )
 
 // Fork: bounces are recorded before Record returns, so a webhook can answer the
@@ -40,5 +45,31 @@ func TestRecordReturnsStoreError(t *testing.T) {
 
 	if err := m.Record(models.Bounce{Email: "a@example.com"}); !errors.Is(err, want) {
 		t.Fatalf("want store error, got %v", err)
+	}
+}
+
+// Fork: a mailbox bounce that can never be recorded is dropped (nil, so the
+// message is deleted); a transient error is returned (the message is kept).
+func TestRecordFromMailbox(t *testing.T) {
+	cases := []struct {
+		name    string
+		err     error
+		wantNil bool
+	}{
+		{"recorded", nil, true},
+		{"invalid bounce type (400)", echo.NewHTTPError(http.StatusBadRequest, "invalid type"), true},
+		{"malformed UUID (22P02)", &pq.Error{Code: "22P02", Message: "invalid input syntax for type uuid"}, true},
+		{"DB down", errors.New("dial tcp: connection refused"), false},
+		{"server error (500)", echo.NewHTTPError(http.StatusInternalServerError, "oops"), false},
+	}
+
+	for _, c := range cases {
+		m := &Manager{
+			opt: Opt{RecordBounceCB: func(models.Bounce) error { return c.err }},
+			log: log.New(io.Discard, "", 0),
+		}
+		if got := m.recordFromMailbox(models.Bounce{Email: "a@example.com"}); (got == nil) != c.wantNil {
+			t.Errorf("%s: got %v, want nil=%v", c.name, got, c.wantNil)
+		}
 	}
 }

@@ -136,7 +136,7 @@ func (m *Manager) Run() {
 func (m *Manager) runMailboxScanner() {
 	for {
 		m.log.Printf("scanning bounce mailbox %s", m.opt.Mailbox.Host)
-		if err := m.mailbox.Scan(1000, m.Record); err != nil {
+		if err := m.mailbox.Scan(1000, m.recordFromMailbox); err != nil {
 			m.log.Printf("error scanning bounce mailbox: %v", err)
 		}
 
