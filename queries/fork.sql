@@ -135,3 +135,40 @@ SELECT EXISTS (
     SELECT 1 FROM subscribers s JOIN bounces b ON b.subscriber_id = s.id AND b.type = 'hard'
     WHERE LOWER(s.email) = LOWER($1)
 );
+
+-- name: get-sending-health
+-- Counts of things stuck in sending, for /health/sending. $1 is how long
+-- something may go without progress (an interval).
+WITH recent_failures AS (
+    -- Failed/uncertain e-mails of the last 15 minutes (partial index on status != 'sent').
+    SELECT campaign_id, COUNT(*) AS n FROM campaign_messages
+    WHERE status != 'sent' AND updated_at > NOW() - INTERVAL '15 minutes'
+    GROUP BY campaign_id
+)
+SELECT
+    -- Running for a while without any e-mail logged lately.
+    (SELECT COUNT(*) FROM campaigns c
+        WHERE c.status = 'running' AND c.started_at < NOW() - $1::INTERVAL
+        AND COALESCE((SELECT MAX(updated_at) FROM campaign_messages WHERE campaign_id = c.id), c.started_at) < NOW() - $1::INTERVAL
+    ) AS running_stalled,
+
+    -- Scheduled, but not started long after its time.
+    (SELECT COUNT(*) FROM campaigns WHERE status = 'scheduled' AND send_at < NOW() - $1::INTERVAL) AS scheduled_overdue,
+
+    -- Paused in the last day with a failed last e-mail, ie: likely auto-paused for errors.
+    (SELECT COUNT(*) FROM campaigns c
+        WHERE c.status = 'paused' AND c.updated_at > NOW() - INTERVAL '1 day'
+        AND (SELECT status FROM campaign_messages WHERE campaign_id = c.id ORDER BY updated_at DESC LIMIT 1) != 'sent'
+    ) AS paused_failing,
+
+    -- Automatic retries well past their time: the retry worker isn't running.
+    (SELECT COUNT(*) FROM campaign_messages WHERE status = 'failed' AND retry_at < NOW() - $1::INTERVAL) AS retries_overdue,
+
+    -- Mostly failing lately: at least 10 failures in 15 minutes, more than sends.
+    (SELECT CASE WHEN f.n >= 10 AND f.n > (
+            SELECT COUNT(*) FROM campaign_messages
+            WHERE campaign_id IN (SELECT campaign_id FROM recent_failures)
+                AND status = 'sent' AND updated_at > NOW() - INTERVAL '15 minutes'
+        ) THEN 1 ELSE 0 END
+        FROM (SELECT COALESCE(SUM(n), 0) AS n FROM recent_failures) f
+    ) AS failing;

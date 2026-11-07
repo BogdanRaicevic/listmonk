@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"maps"
@@ -122,6 +123,10 @@ type Manager struct {
 
 	// Fork: per-subscriber campaign message log writer.
 	msgLog *messageLog
+
+	// Fork: until when (unix nanoseconds) sending is deliberately paused by the
+	// sliding window limit, for /health/sending.
+	slidingUntil atomic.Int64
 }
 
 // CampaignMessage represents an instance of campaign message to be pushed out,

@@ -337,6 +337,7 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 
 		// Public health API endpoint.
 		g.GET("/health", a.HealthCheck)
+		g.GET("/health/sending", a.SendingHealth) // Fork: is mail stuck? (cmd/health_sending.go)
 		g.GET("/robots.txt", a.RobotsTxt)
 
 		// 404 pages.
