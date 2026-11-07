@@ -78,10 +78,11 @@ func NewPOP(opt Opt, lo *log.Logger) *POP {
 	}
 }
 
-// Scan scans the mailbox and pushes the downloaded messages into the given channel.
-// The scanned messages are deleted from the server. A positive limit caps the
-// number of messages scanned.
-func (p *POP) Scan(limit int, ch chan models.Bounce) error {
+// Scan scans the mailbox and records the downloaded bounces with the given func.
+// Messages are deleted from the server once all their bounces are recorded (or
+// they can't be parsed); a message whose bounce fails to record is kept for the
+// next scan. A positive limit caps the number of messages scanned.
+func (p *POP) Scan(limit int, record func(models.Bounce) error) error {
 	c, err := p.client.NewConn()
 	if err != nil {
 		return err
@@ -110,28 +111,36 @@ func (p *POP) Scan(limit int, ch chan models.Bounce) error {
 		count = limit
 	}
 
-	// Download messages.
+	// Download messages, record their bounces and delete the processed ones.
+	// POP3 applies deletions on QUIT (deferred above).
 	for id := 1; id <= count; id++ {
 		// Retrieve the raw bytes of the message.
 		b, err := c.RetrRaw(id)
 		if err != nil {
+			// Keep it for the next scan.
 			p.lo.Printf("error retrieving bounce message %d: %v", id, err)
 			continue
 		}
 
 		bounces, err := parseBounce(b.Bytes())
 		if err != nil {
+			// Unparseable messages are deleted, as they'd never parse.
 			p.lo.Printf("error parsing bounce message %d: %v", id, err)
-			continue
 		}
+
+		recorded := true
 		for _, bounce := range bounces {
 			bounce.Source = p.opt.Host
-			ch <- bounce
+			if err := record(bounce); err != nil {
+				p.lo.Printf("error recording bounce from message %d, keeping it for the next scan: %v", id, err)
+				recorded = false
+				break
+			}
 		}
-	}
+		if !recorded {
+			continue
+		}
 
-	// Delete the downloaded messages.
-	for id := 1; id <= count; id++ {
 		if err := c.Dele(id); err != nil {
 			return err
 		}

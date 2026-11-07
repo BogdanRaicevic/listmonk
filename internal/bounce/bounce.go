@@ -12,9 +12,10 @@ import (
 )
 
 // Mailbox represents a POP/IMAP mailbox client that can scan messages and pass
-// them to a given channel.
+// their bounces to record. A message is deleted from the mailbox only after
+// record succeeds for all its bounces (fork: durable bounces).
 type Mailbox interface {
-	Scan(limit int, ch chan models.Bounce) error
+	Scan(limit int, record func(models.Bounce) error) error
 }
 
 // Opt represents bounce processing options.
@@ -53,7 +54,6 @@ type Opt struct {
 
 // Manager handles e-mail bounces.
 type Manager struct {
-	queue        chan models.Bounce
 	mailbox      Mailbox
 	SES          *webhooks.SES
 	Azure        *webhooks.Azure
@@ -77,7 +77,6 @@ func New(opt Opt, q *Queries, lo *log.Logger) (*Manager, error) {
 	m := &Manager{
 		opt:     opt,
 		queries: q,
-		queue:   make(chan models.Bounce, 1000),
 		log:     lo,
 	}
 
@@ -125,21 +124,11 @@ func New(opt Opt, q *Queries, lo *log.Logger) (*Manager, error) {
 	return m, nil
 }
 
-// Run is a blocking function that listens for bounce events from webhooks and or mailboxes
-// and executes them on the DB.
+// Run is a blocking function that scans the bounce mailbox, if one is enabled.
+// Webhook bounces are recorded directly by Record().
 func (m *Manager) Run() {
 	if m.opt.MailboxEnabled {
-		go m.runMailboxScanner()
-	}
-
-	for b := range m.queue {
-		if b.CreatedAt.IsZero() {
-			b.CreatedAt = time.Now()
-		}
-
-		if err := m.opt.RecordBounceCB(b); err != nil {
-			continue
-		}
+		m.runMailboxScanner()
 	}
 }
 
@@ -147,7 +136,7 @@ func (m *Manager) Run() {
 func (m *Manager) runMailboxScanner() {
 	for {
 		m.log.Printf("scanning bounce mailbox %s", m.opt.Mailbox.Host)
-		if err := m.mailbox.Scan(1000, m.queue); err != nil {
+		if err := m.mailbox.Scan(1000, m.Record); err != nil {
 			m.log.Printf("error scanning bounce mailbox: %v", err)
 		}
 
@@ -156,7 +145,15 @@ func (m *Manager) runMailboxScanner() {
 }
 
 // Record records a new bounce event given the subscriber's email or UUID.
+//
+// Fork: bounces used to be queued in memory and written to the DB later, after
+// the provider (webhook) had been answered or the message deleted from the
+// mailbox, so a restart, crash or DB error lost them. They are now written
+// before returning, and an error is returned if that fails so the caller can
+// have the provider retry (webhooks) or keep the message (mailbox).
 func (m *Manager) Record(b models.Bounce) error {
-	m.queue <- b
-	return nil
+	if b.CreatedAt.IsZero() {
+		b.CreatedAt = time.Now()
+	}
+	return m.opt.RecordBounceCB(b)
 }

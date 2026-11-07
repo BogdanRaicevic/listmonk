@@ -6,6 +6,14 @@ WITH sub AS (
 camp AS (
     SELECT id FROM campaigns WHERE $3 != '' AND uuid = $3::UUID
 ),
+-- Fork: a provider re-delivering a bounce (eg: after a failed answer) has the same
+-- subscriber, campaign, type, source and time. Record and act on it only once.
+dup AS (
+    SELECT 1 FROM bounces WHERE subscriber_id = (SELECT id FROM sub)
+        AND campaign_id IS NOT DISTINCT FROM (SELECT id FROM camp)
+        AND type = $4 AND source = $5 AND created_at = $7
+    LIMIT 1
+),
 num AS (
     -- Add a +1 to include the current insertion that is happening.
     SELECT COUNT(*) + 1 AS num FROM bounces WHERE subscriber_id = (SELECT id FROM sub) AND type = $4
@@ -14,20 +22,24 @@ num AS (
 block1 AS (
     UPDATE subscribers SET status='blocklisted'
     WHERE $9 = 'blocklist' AND (SELECT num FROM num) >= $8 AND id = (SELECT id FROM sub) AND (SELECT status FROM sub) != 'blocklisted'
+        AND NOT EXISTS (SELECT 1 FROM dup)
 ),
 block2 AS (
     UPDATE subscriber_lists SET status='unsubscribed'
     WHERE $9 = 'unsubscribe' AND (SELECT num FROM num) >= $8 AND subscriber_id = (SELECT id FROM sub) AND (SELECT status FROM sub) != 'blocklisted'
+        AND NOT EXISTS (SELECT 1 FROM dup)
 ),
 bounce AS (
     -- Record the bounce if the subscriber is not already blocklisted;
     INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created_at)
     SELECT (SELECT id FROM sub), (SELECT id FROM camp), $4, $5, $6, $7
     WHERE NOT EXISTS (SELECT 1 WHERE (SELECT status FROM sub) = 'blocklisted' OR (SELECT num FROM num) > $8)
+        AND NOT EXISTS (SELECT 1 FROM dup)
 )
 -- This delete  will only run when $9 = 'delete' and the number of bounces exceed $8.
 DELETE FROM subscribers
-    WHERE $9 = 'delete' AND (SELECT num FROM num) >= $8 AND id = (SELECT id FROM sub);
+    WHERE $9 = 'delete' AND (SELECT num FROM num) >= $8 AND id = (SELECT id FROM sub)
+        AND NOT EXISTS (SELECT 1 FROM dup);
 
 -- name: query-bounces
 SELECT COUNT(*) OVER () AS total,
