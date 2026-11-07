@@ -45,6 +45,8 @@
 	</section>
 	<script>window._subscriberCharts = {{ ToJSON $d.Charts }};</script>
 
+	{{ template "subscriber-messages" . }}
+
 	{{- if $d.CampaignViews }}
 	<div class="card float has-table">
 		<h5 class="title">{{ .L.T "globals.terms.views" }}</h5>

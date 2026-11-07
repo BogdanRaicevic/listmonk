@@ -185,3 +185,23 @@ func (s *store) DeleteSubscriber(id int64) error {
 	_, err := s.queries.DeleteSubscribers.Exec(pq.Int64Array{id})
 	return err
 }
+
+// RecordCampaignMessages records the delivery outcomes of a batch of campaign
+// e-mails in the per-subscriber message log (fork).
+func (s *store) RecordCampaignMessages(logs []manager.MessageLog) error {
+	var (
+		campIDs = make(pq.Int64Array, len(logs))
+		subIDs  = make(pq.Int64Array, len(logs))
+		status  = make(pq.StringArray, len(logs))
+		errs    = make(pq.StringArray, len(logs))
+	)
+	for i, l := range logs {
+		campIDs[i] = int64(l.CampaignID)
+		subIDs[i] = int64(l.SubscriberID)
+		status[i] = l.Status
+		errs[i] = l.Error
+	}
+
+	_, err := s.queries.RecordCampaignMessages.Exec(campIDs, subIDs, status, errs)
+	return err
+}

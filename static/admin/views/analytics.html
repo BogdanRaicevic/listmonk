@@ -111,7 +111,7 @@
 							<tbody>
 								{{- range $aud := $d.Audiences }}
 									<tr>
-										<td>#{{ $aud.ID }}: {{ $aud.Name }}</td>
+										<td>#{{ $aud.ID }}: {{ $aud.Name }}{{ if not $aud.Exact }} <span class="text-lighter" title="{{ $.L.T "analytics.audiencesEstimated" }}" data-testid="audience-estimated">≈</span>{{ end }}</td>
 										{{- range $aud.Segments }}
 											<td data-testid="audience-{{ .Key }}" style="white-space: nowrap">
 												<a href="{{ URI "/admin/subscribers" }}?query={{ .Query }}" data-testid="audience-view" title="{{ $.L.T "globals.buttons.view" }}">{{ FormatNumber .Count }}</a>

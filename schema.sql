@@ -170,6 +170,21 @@ CREATE UNIQUE INDEX ON campaign_exclude_lists (campaign_id, list_id);
 DROP INDEX IF EXISTS idx_camp_excl_lists_camp_id; CREATE INDEX idx_camp_excl_lists_camp_id ON campaign_exclude_lists(campaign_id);
 DROP INDEX IF EXISTS idx_camp_excl_lists_list_id; CREATE INDEX idx_camp_excl_lists_list_id ON campaign_exclude_lists(list_id);
 
+-- Fork: per-subscriber log of campaign e-mails and their delivery outcome.
+DROP TABLE IF EXISTS campaign_messages CASCADE;
+CREATE TABLE campaign_messages (
+    campaign_id    INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    subscriber_id  INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    status         TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'uncertain')),
+    error          TEXT NOT NULL DEFAULT '',
+    attempts       INTEGER NOT NULL DEFAULT 1,
+    created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (campaign_id, subscriber_id)
+);
+CREATE INDEX idx_camp_msgs_sub ON campaign_messages(subscriber_id);
+CREATE INDEX idx_camp_msgs_unsent ON campaign_messages(campaign_id, status) WHERE status != 'sent';
+
 DROP TABLE IF EXISTS campaign_views CASCADE;
 CREATE TABLE campaign_views (
     id               BIGSERIAL PRIMARY KEY,

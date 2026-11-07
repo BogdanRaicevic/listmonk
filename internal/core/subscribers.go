@@ -36,8 +36,10 @@ var (
 		"link_clicks":      {},
 		"bounces":          {},
 
-		// Fork: campaign exclusion lists, used by the analytics audience segments.
+		// Fork: campaign exclusion lists and the campaign message log, used by the
+		// analytics audience segments.
 		"campaign_exclude_lists": {},
+		"campaign_messages":      {},
 	}
 )
 

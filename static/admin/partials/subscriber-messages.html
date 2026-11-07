@@ -1,0 +1,45 @@
+{{ define "subscriber-messages" -}}
+{{- /* Fork: campaign e-mails sent to the subscriber (campaign message log). */ -}}
+{{- $d := .Data -}}
+{{- if $d.Messages }}
+<div class="card float has-table" data-testid="subscriber-messages">
+	<h5 class="title">{{ .L.T "subscribers.campaignMessages" }} <span class="text-lighter">({{ len $d.Messages }})</span></h5>
+	<div class="table-wrapper">
+		<table>
+			<thead>
+				<tr>
+					<th>{{ .L.Tc "globals.terms.campaign" 1 }}</th>
+					<th width="15%">{{ .L.T "globals.fields.status" }}</th>
+					<th width="20%">{{ .L.T "subscribers.messageSentAt" }}</th>
+				</tr>
+			</thead>
+			<tbody>
+				{{- range $d.Messages }}
+					<tr data-testid="subscriber-message">
+						<td class="name">
+							<div class="avatar">
+								{{ template "avatar-icon" dict "Kind" "campaign" "Name" .CampaignName "Href" (printf "%s/%d" (URI "/admin/campaigns") .CampaignID) "Title" (printf "%s %s" ($.L.T "globals.buttons.view") .CampaignName) }}
+								<div class="avatar-label vstack gap-1">
+									<div>
+										<a href="{{ URI "/admin/campaigns" }}/{{ .CampaignID }}" class="unstyled">{{ .CampaignName }}</a>
+										<div class="subject text-8 text-light">{{ .CampaignSubject }}</div>
+										{{- if .Error }}<div class="text-8 text-light" data-testid="message-error">{{ .Error }}</div>{{ end }}
+									</div>
+								</div>
+							</div>
+						</td>
+						<td data-label="{{ $.L.T "globals.fields.status" }}">
+							{{- if eq .Status "sent" }}{{ Badge ($.L.T "subscribers.messageSent") "" "success" }}
+							{{- else if eq .Status "uncertain" }}{{ Badge ($.L.T "subscribers.messageUncertain") "" "warning" }}
+							{{- else }}{{ Badge ($.L.T "subscribers.messageFailed") "" "danger" }}{{ end }}
+							{{- if gt .Attempts 1 }} <span class="text-8 text-light">×{{ .Attempts }}</span>{{ end }}
+						</td>
+						<td data-label="{{ $.L.T "subscribers.messageSentAt" }}">{{ NiceDate .UpdatedAt }}</td>
+					</tr>
+				{{- end }}
+			</tbody>
+		</table>
+	</div>
+</div>
+{{- end }}
+{{- end }}
