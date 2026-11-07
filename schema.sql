@@ -29,6 +29,21 @@ CREATE TABLE subscribers (
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 DROP INDEX IF EXISTS idx_subs_email; CREATE UNIQUE INDEX idx_subs_email ON subscribers(LOWER(email));
+
+-- Fork: maps the variants of an e-mail address that reach the same mailbox to one form.
+CREATE OR REPLACE FUNCTION fork_canonical_email(e TEXT) RETURNS TEXT
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $fn$
+    SELECT CASE WHEN x.d = '' OR x.l = '' THEN x.e ELSE
+        (CASE WHEN x.d IN ('gmail.com', 'googlemail.com') THEN REPLACE(x.l, '.', '') ELSE x.l END)
+        || '@' || (CASE WHEN x.d = 'googlemail.com' THEN 'gmail.com' ELSE x.d END)
+    END
+    FROM (
+        SELECT LOWER(TRIM(e)) AS e,
+            SPLIT_PART(SPLIT_PART(LOWER(TRIM(e)), '@', 1), '+', 1) AS l,
+            SPLIT_PART(LOWER(TRIM(e)), '@', 2) AS d
+    ) x
+$fn$;
+CREATE INDEX idx_subs_canonical_email ON subscribers(fork_canonical_email(email));
 DROP INDEX IF EXISTS idx_subs_status; CREATE INDEX idx_subs_status ON subscribers(status);
 DROP INDEX IF EXISTS idx_subs_id_status; CREATE INDEX idx_subs_id_status ON subscribers(id, status);
 DROP INDEX IF EXISTS idx_subs_created_at; CREATE INDEX idx_subs_created_at ON subscribers(created_at);

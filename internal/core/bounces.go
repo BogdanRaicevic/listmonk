@@ -81,13 +81,17 @@ func (c *Core) RecordBounce(b models.Bounce) error {
 		// Ignore the error if it complained of no subscriber.
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Column == "subscriber_id" {
 			c.log.Printf("bounced subscriber (%s / %s) not found", b.SubscriberUUID, b.Email)
-			return nil
+
+			// Fork: the address may still reach other subscribers' mailboxes.
+			return c.applyComplaintToVariants(b, action.Action)
 		}
 
 		c.log.Printf("error recording bounce: %v", err)
+		return err
 	}
 
-	return err
+	// Fork: apply a complaint to every variant of the address.
+	return c.applyComplaintToVariants(b, action.Action)
 }
 
 // BlocklistBouncedSubscribers blocklists subscribers matching bounce IDs or filters.

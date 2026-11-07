@@ -49,7 +49,7 @@ SELECT EXISTS (SELECT 1 FROM campaign_messages WHERE campaign_id = $1);
 -- regular campaigns. Claimed rows are pushed back by 15 minutes so that a slow or
 -- crashed retry run doesn't resend them before its outcome is recorded (which
 -- sets retry_at again). eligible is whether the subscriber should still get the
--- campaign: not blocklisted, still subscribed to one of its lists (honouring
+-- campaign, ie: not blocklisted, still subscribed to one of its lists (honouring
 -- optin) and not in one of its exclusion lists.
 WITH due AS (
     SELECT cm.campaign_id, cm.subscriber_id FROM campaign_messages cm
@@ -104,3 +104,34 @@ SELECT COUNT(*) FILTER (WHERE status = 'failed') AS failed,
        COUNT(*) FILTER (WHERE status = 'uncertain') AS uncertain,
        COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying
 FROM campaign_messages WHERE campaign_id = $1;
+
+-- name: apply-complaint-to-email-variants
+-- Applies a complaint's bounce action to every subscriber whose address reaches
+-- the same mailbox as the complaining one (see fork_canonical_email()), eg:
+-- john.doe+news@gmail.com and johndoe@gmail.com. $1 = e-mail (or ''),
+-- $2 = subscriber UUID (or ''), $3 = action: 'blocklist' blocklists and
+-- unsubscribes them, 'unsubscribe' only unsubscribes them.
+WITH addr AS (
+    SELECT fork_canonical_email(CASE WHEN $1 != '' THEN $1
+        ELSE (SELECT email FROM subscribers WHERE CASE WHEN $2 != '' THEN uuid = $2::UUID ELSE FALSE END) END) AS canon
+),
+subs AS (
+    SELECT id FROM subscribers WHERE fork_canonical_email(email) = (SELECT canon FROM addr)
+),
+bl AS (
+    UPDATE subscribers SET status = 'blocklisted', updated_at = NOW()
+    WHERE $3 = 'blocklist' AND id IN (SELECT id FROM subs) AND status != 'blocklisted'
+)
+UPDATE subscriber_lists SET status = 'unsubscribed', updated_at = NOW()
+    WHERE $3 IN ('blocklist', 'unsubscribe') AND subscriber_id IN (SELECT id FROM subs) AND status != 'unsubscribed';
+
+-- name: is-email-suppressed
+-- Whether an address must not be sent transactional e-mail: one of its variants
+-- (fork_canonical_email()) complained, or the address hard-bounced.
+SELECT EXISTS (
+    SELECT 1 FROM subscribers s JOIN bounces b ON b.subscriber_id = s.id AND b.type = 'complaint'
+    WHERE fork_canonical_email(s.email) = fork_canonical_email($1)
+) OR EXISTS (
+    SELECT 1 FROM subscribers s JOIN bounces b ON b.subscriber_id = s.id AND b.type = 'hard'
+    WHERE LOWER(s.email) = LOWER($1)
+);

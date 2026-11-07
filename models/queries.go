@@ -159,6 +159,8 @@ type Queries struct {
 	ClearCampaignRetry           *sqlx.Stmt `query:"clear-campaign-retry"`
 	ScheduleCampaignResend       *sqlx.Stmt `query:"schedule-campaign-resend"`
 	GetCampaignMessageCounts     *sqlx.Stmt `query:"get-campaign-message-counts"`
+	ApplyComplaintToVariants     *sqlx.Stmt `query:"apply-complaint-to-email-variants"`
+	IsEmailSuppressed            *sqlx.Stmt `query:"is-email-suppressed"`
 }
 
 // ApplyOrphanFilter handles the special subscription_status value "none", which

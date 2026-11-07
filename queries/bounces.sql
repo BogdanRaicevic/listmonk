@@ -1,12 +1,13 @@
 -- name: record-bounce
 -- Insert a bounce and count the bounces for the subscriber and either unsubscribe them,
 WITH sub AS (
-    SELECT id, status FROM subscribers WHERE CASE WHEN $1 != '' THEN uuid = $1::UUID ELSE email = $2 END
+    -- (fork) match the address case-insensitively (uses idx_subs_email on LOWER(email)).
+    SELECT id, status FROM subscribers WHERE CASE WHEN $1 != '' THEN uuid = $1::UUID ELSE LOWER(email) = LOWER($2) END
 ),
 camp AS (
     SELECT id FROM campaigns WHERE $3 != '' AND uuid = $3::UUID
 ),
--- Fork: a provider re-delivering a bounce (eg: after a failed answer) has the same
+-- (fork) a provider re-delivering a bounce (eg: after a failed answer) has the same
 -- subscriber, campaign, type, source and time. Record and act on it only once.
 dup AS (
     SELECT 1 FROM bounces WHERE subscriber_id = (SELECT id FROM sub)
@@ -31,9 +32,11 @@ block2 AS (
 ),
 bounce AS (
     -- Record the bounce if the subscriber is not already blocklisted;
+    -- (fork) complaints and hard bounces are recorded for blocklisted subscribers
+    -- too, as "unsubscribe from all" blocklists and a complaint often follows it.
     INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created_at)
     SELECT (SELECT id FROM sub), (SELECT id FROM camp), $4, $5, $6, $7
-    WHERE NOT EXISTS (SELECT 1 WHERE (SELECT status FROM sub) = 'blocklisted' OR (SELECT num FROM num) > $8)
+    WHERE NOT EXISTS (SELECT 1 WHERE ((SELECT status FROM sub) = 'blocklisted' AND $4 = 'soft') OR (SELECT num FROM num) > $8)
         AND NOT EXISTS (SELECT 1 FROM dup)
 )
 -- This delete  will only run when $9 = 'delete' and the number of bounces exceed $8.
