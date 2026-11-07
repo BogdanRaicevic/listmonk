@@ -3,6 +3,7 @@ package manager
 // Fork: per-subscriber log of campaign e-mails and their delivery outcome.
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -66,6 +67,9 @@ func (m *Manager) logMessage(campID, subID int, err error) {
 		if len(l.Error) > msgLogMaxErrLen {
 			l.Error = l.Error[:msgLogMaxErrLen]
 		}
+		// Postgres rejects invalid UTF-8 (eg: a Latin-1 SMTP reply, or a character
+		// cut above) and NUL bytes, which would fail the whole batch.
+		l.Error = strings.ToValidUTF8(strings.ReplaceAll(l.Error, "\x00", ""), "?")
 	}
 
 	select {

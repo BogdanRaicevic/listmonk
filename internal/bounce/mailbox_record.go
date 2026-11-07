@@ -17,7 +17,7 @@ import (
 // down) are returned, so the message is kept for the next scan.
 func (m *Manager) recordFromMailbox(b models.Bounce) error {
 	err := m.Record(b)
-	if err == nil || !isPermanentRecordErr(err) {
+	if err == nil || !IsPermanentRecordErr(err) {
 		return err
 	}
 
@@ -25,9 +25,9 @@ func (m *Manager) recordFromMailbox(b models.Bounce) error {
 	return nil
 }
 
-// isPermanentRecordErr reports whether recording a bounce failed because of the
+// IsPermanentRecordErr reports whether recording a bounce failed because of the
 // bounce itself, so retrying can't help.
-func isPermanentRecordErr(err error) bool {
+func IsPermanentRecordErr(err error) bool {
 	if code := echo.StatusCode(err); code >= 400 && code < 500 {
 		return true
 	}

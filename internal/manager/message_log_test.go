@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // fakeLogStore records message log batches. The embedded Store is nil; only
@@ -116,6 +117,23 @@ func TestMessageLogTruncatesErrors(t *testing.T) {
 	rows := f.rows()
 	if len(rows) != 1 || len(rows[0].Error) != msgLogMaxErrLen {
 		t.Fatalf("want 1 row with %d-char error, got %+v", msgLogMaxErrLen, rows)
+	}
+}
+
+// Postgres rejects invalid UTF-8 and NUL bytes, which would fail the whole batch.
+func TestMessageLogSanitizesErrors(t *testing.T) {
+	f := &fakeLogStore{}
+	m := newTestLogManager(f)
+
+	m.logMessage(1, 1, errors.New(strings.Repeat("x", msgLogMaxErrLen-1)+"ü")) // ü cut in half
+	m.logMessage(1, 2, errors.New("550 Empf\xe4nger unbekannt"))               // Latin-1
+	m.logMessage(1, 3, errors.New("550 bad\x00byte"))
+	m.stopMessageLog()
+
+	for _, r := range f.rows() {
+		if !utf8.ValidString(r.Error) || strings.ContainsRune(r.Error, 0) {
+			t.Errorf("subscriber %d: error not valid for Postgres: %q", r.SubscriberID, r.Error)
+		}
 	}
 }
 

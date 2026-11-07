@@ -52,7 +52,8 @@ type campaignMessageCounts struct {
 	Failed    int  `db:"failed"`
 	Uncertain int  `db:"uncertain"`
 	Retrying  int  `db:"retrying"`
-	Finished  bool `db:"finished"`
+	// Resendable is whether the campaign can be resent (finished and regular).
+	Resendable bool `db:"resendable"`
 }
 
 // getCampaignMessageCounts returns how many of a campaign's e-mails weren't sent

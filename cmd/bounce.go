@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/knadh/listmonk/internal/auth"
+	"github.com/knadh/listmonk/internal/bounce"
 	"github.com/knadh/listmonk/models"
 	"github.com/labstack/echo/v5"
 )
@@ -374,12 +375,13 @@ func (a *App) BounceWebhook(c *echo.Context) error {
 
 	// Insert bounces into the DB before answering. Fork: if one can't be stored,
 	// answer with an error so that the provider retries the notification instead
-	// of the bounce being lost (re-delivered bounces are de-duplicated). Invalid
-	// bounces (4xx) are logged and skipped, as retrying wouldn't help.
+	// of the bounce being lost (re-delivered bounces are de-duplicated). Bounces
+	// that can never be recorded (invalid data) are logged and skipped, as
+	// retrying wouldn't help and would hold back the rest of the batch.
 	for _, b := range bounces {
 		if err := a.bounce.Record(b); err != nil {
 			a.log.Printf("error recording bounce: %v", err)
-			if code := echo.StatusCode(err); code >= 400 && code < 500 {
+			if bounce.IsPermanentRecordErr(err) {
 				continue
 			}
 			return echo.NewHTTPError(http.StatusServiceUnavailable, a.i18n.T("public.errorProcessingRequest"))

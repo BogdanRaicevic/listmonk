@@ -8,11 +8,15 @@ camp AS (
     SELECT id FROM campaigns WHERE $3 != '' AND uuid = $3::UUID
 ),
 -- (fork) a provider re-delivering a bounce (eg: after a failed answer) has the same
--- subscriber, campaign, type, source and time. Record and act on it only once.
+-- subscriber, campaign, type, source and time, or the same message ID (mailbox
+-- bounces without a Date: header get the scan time). Record and act on it only once.
 dup AS (
     SELECT 1 FROM bounces WHERE subscriber_id = (SELECT id FROM sub)
         AND campaign_id IS NOT DISTINCT FROM (SELECT id FROM camp)
-        AND type = $4 AND source = $5 AND created_at = $7
+        AND type = $4 AND source = $5
+        AND (created_at = $7 OR (
+            COALESCE($6::JSONB->>'message_id', '') != '' AND meta->>'message_id' = $6::JSONB->>'message_id'
+        ))
     LIMIT 1
 ),
 num AS (
