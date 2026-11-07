@@ -114,13 +114,19 @@ FROM campaign_messages WHERE campaign_id = $1 AND status != 'sent';
 -- the same mailbox as the complaining one (see fork_canonical_email()), eg:
 -- john.doe+news@gmail.com and johndoe@gmail.com. $1 = e-mail (or ''),
 -- $2 = subscriber UUID (or ''), $3 = action: 'blocklist' blocklists and
--- unsubscribes them, 'unsubscribe' only unsubscribes them.
+-- unsubscribes them, 'unsubscribe' only unsubscribes them. It applies once the
+-- complaints across all the variants reach the configured count ($4); $5 is 1
+-- when the current complaint wasn't stored (the address isn't a subscriber).
 WITH addr AS (
     SELECT fork_canonical_email(CASE WHEN $1 != '' THEN $1
         ELSE (SELECT email FROM subscribers WHERE CASE WHEN $2 != '' THEN uuid = $2::UUID ELSE FALSE END) END) AS canon
 ),
 subs AS (
     SELECT id FROM subscribers WHERE fork_canonical_email(email) = (SELECT canon FROM addr)
+        AND (
+            SELECT COUNT(*) FROM bounces b JOIN subscribers s ON s.id = b.subscriber_id
+            WHERE b.type = 'complaint' AND fork_canonical_email(s.email) = (SELECT canon FROM addr)
+        ) + $5 >= $4
 ),
 bl AS (
     UPDATE subscribers SET status = 'blocklisted', updated_at = NOW()

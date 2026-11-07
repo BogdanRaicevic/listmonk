@@ -8,9 +8,11 @@ import (
 
 // applyComplaintToVariants applies a complaint's bounce action (blocklist or
 // unsubscribe) to every subscriber whose address reaches the same mailbox as the
-// complaining one, eg: john.doe+news@gmail.com and johndoe@gmail.com. Other
-// bounce types and actions are left alone.
-func (c *Core) applyComplaintToVariants(b models.Bounce, action string) error {
+// complaining one, eg: john.doe+news@gmail.com and johndoe@gmail.com, once the
+// complaints across those addresses reach the action's count. unstored is true
+// when the current complaint wasn't recorded (the address isn't a subscriber),
+// so that it's counted too. Other bounce types and actions are left alone.
+func (c *Core) applyComplaintToVariants(b models.Bounce, action string, count int, unstored bool) error {
 	if b.Type != models.BounceTypeComplaint || (action != "blocklist" && action != "unsubscribe") {
 		return nil
 	}
@@ -18,7 +20,11 @@ func (c *Core) applyComplaintToVariants(b models.Bounce, action string) error {
 		return nil
 	}
 
-	if _, err := c.q.ApplyComplaintToVariants.Exec(b.Email, b.SubscriberUUID, action); err != nil {
+	extra := 0
+	if unstored {
+		extra = 1
+	}
+	if _, err := c.q.ApplyComplaintToVariants.Exec(b.Email, b.SubscriberUUID, action, count, extra); err != nil {
 		c.log.Printf("error applying complaint to the address's variants: %v", err)
 		return err
 	}
