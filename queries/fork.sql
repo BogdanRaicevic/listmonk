@@ -162,7 +162,9 @@ SELECT
     ) AS paused_failing,
 
     -- Automatic retries well past their time: the retry worker isn't running.
-    (SELECT COUNT(*) FROM campaign_messages WHERE status = 'failed' AND retry_at < NOW() - $1::INTERVAL) AS retries_overdue,
+    -- Only retries it would claim (finished regular campaigns) count.
+    (SELECT COUNT(*) FROM campaign_messages WHERE status = 'failed' AND retry_at < NOW() - $1::INTERVAL
+        AND campaign_id IN (SELECT id FROM campaigns WHERE status = 'finished' AND type = 'regular')) AS retries_overdue,
 
     -- Mostly failing lately: at least 10 failures in 15 minutes, more than sends.
     (SELECT CASE WHEN f.n >= 10 AND f.n > (
