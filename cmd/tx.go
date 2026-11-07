@@ -145,6 +145,14 @@ func (a *App) SendTxMessage(c *echo.Context) error {
 			}
 		}
 
+		// Fork: never send to an address that complained or hard-bounced.
+		if suppressed, err := a.core.IsEmailSuppressed(sub.Email); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.internalError"))
+		} else if suppressed {
+			notFound = append(notFound, a.i18n.Ts("subscribers.emailSuppressed", "email", sub.Email))
+			continue
+		}
+
 		// Render the message.
 		if err := m.Render(sub, tpl, a.manager.GenericTemplateFuncs()); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest,
