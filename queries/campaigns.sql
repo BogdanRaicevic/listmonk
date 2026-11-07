@@ -365,6 +365,12 @@ subs AS (
                 SELECT 1 FROM subscriber_lists esl
                 WHERE esl.subscriber_id = s.id AND esl.list_id = ANY($7::INT[])
             )
+            -- (fork) skip subscribers the message log has as sent or maybe delivered,
+            -- as a resume restarts from the lowest failed subscriber kept for it.
+            AND NOT EXISTS (
+                SELECT 1 FROM campaign_messages cm
+                WHERE cm.campaign_id = $1 AND cm.subscriber_id = s.id AND cm.status != 'failed'
+            )
             AND (
                 -- If it's an optin campaign and the list is double-optin, only pick unconfirmed subscribers.
                 ($2 = 'optin' AND sl.status = 'unconfirmed' AND campLists.optin = 'double')

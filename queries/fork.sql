@@ -42,7 +42,11 @@ LIMIT 200;
 
 -- name: has-campaign-messages
 -- Whether a campaign has any logged e-mails, ie: was sent with the message log on.
-SELECT EXISTS (SELECT 1 FROM campaign_messages WHERE campaign_id = $1);
+-- The ORDER BY on the primary key keeps it an index probe: with a plain EXISTS,
+-- the prepared statement's generic plan seq-scans the whole table.
+SELECT COUNT(*) > 0 FROM (
+    SELECT 1 FROM campaign_messages WHERE campaign_id = $1 ORDER BY campaign_id, subscriber_id LIMIT 1
+) x;
 
 -- name: claim-campaign-retries
 -- Claims up to $1 failed campaign e-mails whose retry is due, for finished
@@ -87,36 +91,46 @@ ORDER BY claimed.campaign_id, s.id;
 UPDATE campaign_messages SET retry_at = NULL, updated_at = NOW() WHERE campaign_id = $1 AND subscriber_id = $2;
 
 -- name: schedule-campaign-resend
--- Schedules all failed e-mails of a finished campaign to be resent now. Returns
--- how many were scheduled.
+-- Schedules the failed e-mails of a finished campaign to be resent now. Returns
+-- how many were scheduled. Rows with a future retry_at are left alone: they're
+-- being resent right now (claimed) or will be retried automatically anyway.
 WITH upd AS (
     UPDATE campaign_messages cm SET retry_at = NOW()
     FROM campaigns c
     WHERE c.id = cm.campaign_id AND cm.campaign_id = $1 AND cm.status = 'failed' AND c.status = 'finished'
+        AND (cm.retry_at IS NULL OR cm.retry_at <= NOW())
     RETURNING 1
 )
 SELECT COUNT(*) FROM upd;
 
 -- name: get-campaign-message-counts
 -- Counts of a campaign's logged e-mails that weren't sent: failed, uncertain
--- (may have been delivered), and failed ones pending a retry.
+-- (may have been delivered), and failed ones pending a retry; and whether the
+-- campaign is finished (only finished campaigns are resent).
 SELECT COUNT(*) FILTER (WHERE status = 'failed') AS failed,
        COUNT(*) FILTER (WHERE status = 'uncertain') AS uncertain,
-       COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying
-FROM campaign_messages WHERE campaign_id = $1;
+       COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying,
+       COALESCE((SELECT status = 'finished' FROM campaigns WHERE id = $1), FALSE) AS finished
+FROM campaign_messages WHERE campaign_id = $1 AND status != 'sent';
 
 -- name: apply-complaint-to-email-variants
 -- Applies a complaint's bounce action to every subscriber whose address reaches
 -- the same mailbox as the complaining one (see fork_canonical_email()), eg:
 -- john.doe+news@gmail.com and johndoe@gmail.com. $1 = e-mail (or ''),
 -- $2 = subscriber UUID (or ''), $3 = action: 'blocklist' blocklists and
--- unsubscribes them, 'unsubscribe' only unsubscribes them.
+-- unsubscribes them, 'unsubscribe' only unsubscribes them. It applies once the
+-- complaints across all the variants reach the configured count ($4); $5 is 1
+-- when the current complaint wasn't stored (the address isn't a subscriber).
 WITH addr AS (
     SELECT fork_canonical_email(CASE WHEN $1 != '' THEN $1
         ELSE (SELECT email FROM subscribers WHERE CASE WHEN $2 != '' THEN uuid = $2::UUID ELSE FALSE END) END) AS canon
 ),
 subs AS (
     SELECT id FROM subscribers WHERE fork_canonical_email(email) = (SELECT canon FROM addr)
+        AND (
+            SELECT COUNT(*) FROM bounces b JOIN subscribers s ON s.id = b.subscriber_id
+            WHERE b.type = 'complaint' AND fork_canonical_email(s.email) = (SELECT canon FROM addr)
+        ) + $5 >= $4
 ),
 bl AS (
     UPDATE subscribers SET status = 'blocklisted', updated_at = NOW()
@@ -162,7 +176,9 @@ SELECT
     ) AS paused_failing,
 
     -- Automatic retries well past their time: the retry worker isn't running.
-    (SELECT COUNT(*) FROM campaign_messages WHERE status = 'failed' AND retry_at < NOW() - $1::INTERVAL) AS retries_overdue,
+    -- Only retries it would claim (finished regular campaigns) count.
+    (SELECT COUNT(*) FROM campaign_messages WHERE status = 'failed' AND retry_at < NOW() - $1::INTERVAL
+        AND campaign_id IN (SELECT id FROM campaigns WHERE status = 'finished' AND type = 'regular')) AS retries_overdue,
 
     -- Mostly failing lately: at least 10 failures in 15 minutes, more than sends.
     (SELECT CASE WHEN f.n >= 10 AND f.n > (

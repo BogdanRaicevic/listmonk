@@ -83,7 +83,7 @@ func (c *Core) RecordBounce(b models.Bounce) error {
 			c.log.Printf("bounced subscriber (%s / %s) not found", b.SubscriberUUID, b.Email)
 
 			// Fork: the address may still reach other subscribers' mailboxes.
-			return c.applyComplaintToVariants(b, action.Action)
+			return c.applyComplaintToVariants(b, action.Action, action.Count, true)
 		}
 
 		c.log.Printf("error recording bounce: %v", err)
@@ -91,7 +91,7 @@ func (c *Core) RecordBounce(b models.Bounce) error {
 	}
 
 	// Fork: apply a complaint to every variant of the address.
-	return c.applyComplaintToVariants(b, action.Action)
+	return c.applyComplaintToVariants(b, action.Action, action.Count, false)
 }
 
 // BlocklistBouncedSubscribers blocklists subscribers matching bounce IDs or filters.

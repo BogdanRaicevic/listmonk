@@ -17,6 +17,7 @@
     "analytics.opened": "Opened",
     "analytics.resend": "Resend",
     "analytics.resendConfirm": "Resend the failed e-mails of '{name}' to those who should still get it? E-mails that may have been delivered aren't resent.",
+    "analytics.resendNone": "Nothing to resend: the campaign has no failed e-mails, or isn't finished yet.",
     "analytics.resendScheduled": "Resend scheduled. It starts within a minute.",
     "analytics.retrying": "{num} retrying automatically",
     "analytics.showUnique": "Show unique counts?",

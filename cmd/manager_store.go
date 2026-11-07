@@ -196,16 +196,13 @@ func (s *store) RecordCampaignMessages(logs []manager.MessageLog) error {
 		subIDs  = make(pq.Int64Array, len(logs))
 		status  = make(pq.StringArray, len(logs))
 		errs    = make(pq.StringArray, len(logs))
+		temp    = make(pq.BoolArray, len(logs))
 	)
 	for i, l := range logs {
 		campIDs[i] = int64(l.CampaignID)
 		subIDs[i] = int64(l.SubscriberID)
 		status[i] = l.Status
 		errs[i] = l.Error
-	}
-
-	temp := make(pq.BoolArray, len(logs))
-	for i, l := range logs {
 		temp[i] = l.Temporary
 	}
 

@@ -57,8 +57,10 @@ func isTemporarySendErr(err error) bool {
 		return true
 	}
 
-	// No SMTP server configured/available for the messenger.
-	return strings.Contains(err.Error(), "no SMTP servers available")
+	// No SMTP server configured/available for the messenger, or no free
+	// connection in smtppool's pool in time (both before anything is sent).
+	msg := err.Error()
+	return strings.Contains(msg, "no SMTP servers available") || strings.Contains(msg, "timed out waiting for free conn")
 }
 
 // isUncertainSendErr reports whether a send error means the e-mail may have
@@ -120,6 +122,11 @@ func (m *Manager) runRetries() {
 
 // processRetries resends one batch of due retries and returns how many it claimed.
 func (m *Manager) processRetries() (int, error) {
+	// Don't resend while the sliding window limit is pausing sends.
+	if m.SlidingWindowWait() {
+		return 0, nil
+	}
+
 	targets, err := m.store.ClaimCampaignRetries(retryBatchSize)
 	if err != nil || len(targets) == 0 {
 		return 0, err

@@ -4,11 +4,9 @@ package main
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/models"
 	"github.com/labstack/echo/v5"
 	"github.com/lib/pq"
 )
@@ -51,9 +49,10 @@ func (a *App) hasCampaignMessages(campID int) bool {
 // campaignMessageCounts is the summary of a campaign's logged e-mails that
 // weren't sent.
 type campaignMessageCounts struct {
-	Failed    int `db:"failed"`
-	Uncertain int `db:"uncertain"`
-	Retrying  int `db:"retrying"`
+	Failed    int  `db:"failed"`
+	Uncertain int  `db:"uncertain"`
+	Retrying  int  `db:"retrying"`
+	Finished  bool `db:"finished"`
 }
 
 // getCampaignMessageCounts returns how many of a campaign's e-mails weren't sent
@@ -68,28 +67,22 @@ func (a *App) getCampaignMessageCounts(campID int) (campaignMessageCounts, error
 // resent right away. The retry worker resends them to those who should still get
 // the campaign.
 func (a *App) ResendCampaignFailed(c *echo.Context) error {
-	user := auth.GetUser(c)
-
-	id, _ := strconv.Atoi(c.Param("id"))
-	if id < 1 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-	}
+	id := getID(c)
 
 	// The user must be able to manage the campaign.
-	getAll, permittedLists := user.GetPermittedLists(auth.PermTypeManage)
-	getAll = getAll || user.HasPerm(auth.PermCampaignsManageAll)
-	items, err := a.core.GetAnalyticsItems(models.ResourceCampaigns, []int{id}, getAll, permittedLists)
-	if err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
 		return err
-	}
-	if len(items) == 0 {
-		return echo.NewHTTPError(http.StatusNotFound, a.i18n.Ts("globals.messages.notFound", "name", "campaign"))
 	}
 
 	var n int
 	if err := a.queries.ScheduleCampaignResend.Get(&n, id); err != nil {
 		a.log.Printf("error scheduling campaign resend: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.errorUpdating", "name", "campaign", "error", err.Error()))
+	}
+
+	// Nothing to resend: no failed e-mails, or the campaign isn't finished.
+	if n == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("analytics.resendNone"))
 	}
 
 	return c.JSON(http.StatusOK, okResp{map[string]int{"scheduled": n}})

@@ -125,13 +125,19 @@ func (m *Manager) runMessageLog() {
 }
 
 // stopMessageLog stops the writer after flushing queued outcomes, waiting up to
-// a few seconds for it.
+// 2 seconds for it (a reload force-restarts after 3).
+//
+// Known limits, accepted as such: Close(), and so this flush, only runs on a
+// reload (SIGHUP), so up to about a second of outcomes is lost when the process
+// is stopped (eg: SIGTERM from docker/systemd), and a batch whose write fails is
+// dropped. A lost "sent" row can let a resume send that e-mail again; a lost
+// temporary failure isn't retried automatically.
 func (m *Manager) stopMessageLog() {
 	m.msgLog.stopOnce.Do(func() { close(m.msgLog.stop) })
 
 	select {
 	case <-m.msgLog.done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second):
 		m.log.Printf("timed out flushing the campaign message log")
 	}
 }
