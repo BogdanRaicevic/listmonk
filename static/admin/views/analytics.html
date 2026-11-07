@@ -122,6 +122,9 @@
 													<a href="{{ URI "/api/subscribers/export" }}?columns=slim&amp;query={{ .Query }}" download="campaign-{{ $aud.ID }}-{{ .Key }}.csv" data-testid="audience-download" title="{{ $.L.T "globals.buttons.export" }}" aria-label="{{ $.L.T "globals.buttons.export" }}: {{ $.L.T .Label }}">{{ Icon "download-cloud" }}</a>
 												{{- end }}
 												{{- if eq .Key "not-sent" }}
+													{{- if gt $aud.Uncertain 0 }}
+														<div class="text-8 text-light" data-testid="audience-uncertain" title="{{ $.L.T "analytics.uncertainHelp" }}">{{ $.L.Ts "analytics.uncertain" "num" (FormatNumber $aud.Uncertain) }}</div>
+													{{- end }}
 													{{- if gt $aud.Retrying 0 }}
 														<div class="text-8 text-light" data-testid="audience-retrying">{{ $.L.Ts "analytics.retrying" "num" (FormatNumber $aud.Retrying) }}</div>
 													{{- end }}

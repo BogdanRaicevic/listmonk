@@ -5,6 +5,7 @@ package manager
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/textproto"
 	"strings"
@@ -58,6 +59,44 @@ func isTemporarySendErr(err error) bool {
 
 	// No SMTP server configured/available for the messenger.
 	return strings.Contains(err.Error(), "no SMTP servers available")
+}
+
+// isUncertainSendErr reports whether a send error means the e-mail may have
+// been delivered anyway: the connection to the SMTP server broke or timed out
+// after it was established (eg: EOF, reset, broken pipe, read/write timeout),
+// possibly after the server had accepted the message. Such e-mails are never
+// resent automatically, nor on a campaign resume, to avoid duplicates.
+// Failures to connect and SMTP replies are certain, not uncertain.
+func isUncertainSendErr(err error) bool {
+	if err == nil || isTemporarySendErr(err) {
+		return false
+	}
+
+	// The server replied (eg: 5xx): certainly not delivered.
+	var smtpErr *textproto.Error
+	if errors.As(err, &smtpErr) {
+		return false
+	}
+
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+
+	// Any other network error on an established connection (read/write, timeouts).
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+
+	msg := err.Error()
+	return strings.Contains(msg, "connection reset") || strings.Contains(msg, "broken pipe")
+}
+
+// keepForResume reports whether a failed campaign e-mail should be kept for a
+// resend when its campaign is stopped (paused) and later resumed. Uncertain
+// sends may have been delivered, so they aren't.
+func keepForResume(err error) bool {
+	return err != nil && !isUncertainSendErr(err)
 }
 
 // runRetries periodically resends failed campaign e-mails whose retry is due.
