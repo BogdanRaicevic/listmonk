@@ -95,6 +95,9 @@ type subscriberView struct {
 	TotalViews    int
 	Charts        types.JSONText
 	TotalClicks   int
+
+	// Fork: campaign e-mails sent to the subscriber (message log).
+	Messages []subCampaignMessage
 }
 
 // subCampaignView and subLinkClick are the parsed rows of a subscriber's activity,
@@ -254,6 +257,11 @@ func (a *App) ViewSubscriberInfo(c *echo.Context) error {
 
 	data.Charts, err = a.core.GetSubscriberCharts(out.ID, allLists, listIDs)
 	if err != nil {
+		return err
+	}
+
+	// Fork: campaign e-mails sent to the subscriber.
+	if data.Messages, err = a.getSubscriberMessages(out.ID, allLists, listIDs); err != nil {
 		return err
 	}
 

@@ -60,6 +60,9 @@ type Store interface {
 	CreateLink(url string) (string, error)
 	BlocklistSubscriber(id int64) error
 	DeleteSubscriber(id int64) error
+
+	// Fork: campaign message log.
+	RecordCampaignMessages(logs []MessageLog) error
 }
 
 // Messenger is an interface for a generic messaging backend,
@@ -114,6 +117,9 @@ type Manager struct {
 	slidingStart time.Time
 
 	tplFuncs template.FuncMap
+
+	// Fork: per-subscriber campaign message log writer.
+	msgLog *messageLog
 }
 
 // CampaignMessage represents an instance of campaign message to be pushed out,
@@ -197,8 +203,12 @@ func New(cfg Config, store Store, i *i18n.I18n, l *log.Logger) *Manager {
 		campMsgQ:     make(chan CampaignMessage, cfg.Concurrency*cfg.MessageRate*2),
 		msgQ:         make(chan models.Message, cfg.Concurrency*cfg.MessageRate*2),
 		slidingStart: time.Now(),
+		msgLog:       newMessageLog(),
 	}
 	m.tplFuncs = m.makeGnericFuncMap()
+
+	// Fork: start the campaign message log writer.
+	go m.runMessageLog()
 
 	return m
 }
@@ -457,6 +467,9 @@ func (m *Manager) StopCampaign(id int) {
 func (m *Manager) Close() {
 	close(m.nextPipes)
 	close(m.msgQ)
+
+	// Fork: write out any queued campaign message outcomes.
+	m.stopMessageLog()
 }
 
 // scanCampaigns is a blocking function that periodically scans the data source
@@ -567,6 +580,9 @@ func (m *Manager) worker() {
 
 			// Increment the send rate or the error counter if there was an error.
 			if msg.pipe != nil {
+				// Fork: record the outcome in the per-subscriber message log.
+				m.logMessage(msg.Campaign.ID, msg.Subscriber.ID, err)
+
 				if err != nil {
 					// Call the error callback, which keeps track of the error count
 					// and stops the campaign if the error count exceeds the threshold.

@@ -47,6 +47,7 @@ var migList = []migFunc{
 	{"v6.2.0", migrations.V6_2_0},
 	{"v7.0.0", migrations.V7_0_0},
 	{"v7.0.1-fork.1", migrations.V7_0_1_Fork1}, // Fork-only (campaign exclude lists). Sorts after v7.0.0, before any upstream v7.0.1+.
+	{"v7.0.1-fork.2", migrations.V7_0_1_Fork2}, // Fork-only (campaign message log).
 }
 
 // upgrade upgrades the database to the current version by running SQL migration files

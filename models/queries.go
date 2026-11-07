@@ -150,6 +150,11 @@ type Queries struct {
 	DeleteRole            *sqlx.Stmt `query:"delete-role"`
 	UpsertListPermissions *sqlx.Stmt `query:"upsert-list-permissions"`
 	DeleteListPermission  *sqlx.Stmt `query:"delete-list-permission"`
+
+	// Fork: campaign message log (queries/fork.sql).
+	RecordCampaignMessages       *sqlx.Stmt `query:"record-campaign-messages"`
+	GetSubscriberCampaignMessage *sqlx.Stmt `query:"get-subscriber-campaign-messages"`
+	HasCampaignMessages          *sqlx.Stmt `query:"has-campaign-messages"`
 }
 
 // ApplyOrphanFilter handles the special subscription_status value "none", which

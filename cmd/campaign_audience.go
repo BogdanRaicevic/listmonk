@@ -25,6 +25,10 @@ type campaignAudience struct {
 	ID       int
 	Name     string
 	Segments []audienceSegment
+
+	// Exact is true when recipients come from the campaign message log rather
+	// than being estimated from list memberships (campaigns sent before the log).
+	Exact bool
 }
 
 // campaignSentExp matches subscribers who were on the campaign's lists when it
@@ -45,6 +49,18 @@ const campaignSentExp = `subscribers.id IN (
   WHERE esl.list_id IN (SELECT list_id FROM campaign_exclude_lists WHERE campaign_id = %[1]d AND list_id IS NOT NULL)
 )`
 
+// campaignLoggedExp matches subscribers the campaign message log has as sent to
+// (exact), whose subscription to one of the campaign's lists matches %[2]s.
+const campaignLoggedExp = `subscribers.id IN (
+  SELECT subscriber_id FROM campaign_messages WHERE campaign_id = %[1]d AND status = 'sent'
+) AND subscribers.id IN (
+  SELECT sl.subscriber_id FROM subscriber_lists sl
+  JOIN lists l ON l.id = sl.list_id
+  JOIN campaigns c ON c.id = %[1]d
+  WHERE sl.list_id IN (SELECT list_id FROM campaign_lists WHERE campaign_id = %[1]d)
+    AND %[2]s
+)`
+
 const (
 	// The subscription is still active (honouring list optin), so the
 	// subscriber received the campaign and can still be retargeted.
@@ -55,19 +71,26 @@ const (
 	subUnsubAfterCond = `(sl.status = 'unsubscribed' AND sl.updated_at >= c.started_at)`
 )
 
-// newCampaignAudience returns the engagement segments of a campaign (without counts).
-func newCampaignAudience(id int, name string) campaignAudience {
+// newCampaignAudience returns the engagement segments of a campaign (without
+// counts). exact uses the campaign message log for who received the campaign.
+func newCampaignAudience(id int, name string, exact bool) campaignAudience {
+	sentExp := campaignSentExp
+	if exact {
+		sentExp = campaignLoggedExp
+	}
+
 	var (
 		viewed    = fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM campaign_views WHERE campaign_id = %d AND subscriber_id IS NOT NULL)`, id)
 		clicked   = fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM link_clicks WHERE campaign_id = %d AND subscriber_id IS NOT NULL)`, id)
 		bounced   = fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM bounces WHERE campaign_id = %d)`, id)
-		recipient = `subscribers.status != 'blocklisted' AND ` + fmt.Sprintf(campaignSentExp, id, subActiveCond)
-		unsubbed  = fmt.Sprintf(campaignSentExp, id, subUnsubAfterCond)
+		recipient = `subscribers.status != 'blocklisted' AND ` + fmt.Sprintf(sentExp, id, subActiveCond)
+		unsubbed  = fmt.Sprintf(sentExp, id, subUnsubAfterCond)
 	)
 
 	return campaignAudience{
-		ID:   id,
-		Name: name,
+		ID:    id,
+		Name:  name,
+		Exact: exact,
 		Segments: []audienceSegment{
 			{Key: "opened", Label: "analytics.opened", Query: viewed},
 			{Key: "not-opened", Label: "analytics.notOpened", Query: recipient + " AND NOT (" + viewed + ")"},

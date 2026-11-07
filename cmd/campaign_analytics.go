@@ -117,7 +117,7 @@ func (a *App) viewAnalytics(c *echo.Context, resource string) error {
 	// individual tracking on; the template shows a notice otherwise.
 	if resource == models.ResourceCampaigns && data.Can(auth.PermSubscribersSqlQuery) {
 		for _, item := range items {
-			aud := newCampaignAudience(item.ID, item.Name)
+			aud := newCampaignAudience(item.ID, item.Name, a.hasCampaignMessages(item.ID))
 			if err := countAudience(a.db, &aud); err != nil {
 				a.log.Printf("error counting campaign audience: %v", err)
 				return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.errorFetching", "name", "audiences", "error", err.Error()))
