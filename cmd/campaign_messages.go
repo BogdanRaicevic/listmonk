@@ -51,8 +51,9 @@ func (a *App) hasCampaignMessages(campID int) bool {
 // campaignMessageCounts is the summary of a campaign's logged e-mails that
 // weren't sent.
 type campaignMessageCounts struct {
-	NotSent  int `db:"not_sent"`
-	Retrying int `db:"retrying"`
+	Failed    int `db:"failed"`
+	Uncertain int `db:"uncertain"`
+	Retrying  int `db:"retrying"`
 }
 
 // getCampaignMessageCounts returns how many of a campaign's e-mails weren't sent

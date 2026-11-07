@@ -124,7 +124,8 @@ func (a *App) viewAnalytics(c *echo.Context, resource string) error {
 					a.log.Printf("error counting campaign messages: %v", err)
 				}
 				aud.Retrying = mc.Retrying
-				aud.CanResend = mc.NotSent > mc.Retrying && data.Can(auth.PermCampaignsManage, auth.PermCampaignsManageAll)
+				aud.Uncertain = mc.Uncertain
+				aud.CanResend = mc.Failed > mc.Retrying && data.Can(auth.PermCampaignsManage, auth.PermCampaignsManageAll)
 			}
 			if err := countAudience(a.db, &aud); err != nil {
 				a.log.Printf("error counting campaign audience: %v", err)

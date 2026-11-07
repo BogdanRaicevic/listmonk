@@ -35,8 +35,10 @@ type campaignAudience struct {
 	Exact bool
 
 	// Retrying is how many of the campaign's failed e-mails await an automatic
-	// retry, and CanResend whether the user may resend the failed ones.
+	// retry, Uncertain how many may have been delivered (never resent), and
+	// CanResend whether there are failed ones the user may resend.
 	Retrying  int
+	Uncertain int
 	CanResend bool
 }
 

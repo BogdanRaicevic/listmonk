@@ -98,7 +98,9 @@ WITH upd AS (
 SELECT COUNT(*) FROM upd;
 
 -- name: get-campaign-message-counts
--- Counts of a campaign's logged e-mails that weren't sent, and of those pending a retry.
-SELECT COUNT(*) FILTER (WHERE status != 'sent') AS not_sent,
+-- Counts of a campaign's logged e-mails that weren't sent: failed, uncertain
+-- (may have been delivered), and failed ones pending a retry.
+SELECT COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+       COUNT(*) FILTER (WHERE status = 'uncertain') AS uncertain,
        COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying
 FROM campaign_messages WHERE campaign_id = $1;

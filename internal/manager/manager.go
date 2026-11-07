@@ -569,7 +569,9 @@ func (m *Manager) worker() {
 
 				// Retain failed sends only when stopped, allowing retry on resume.
 				// Otherwise, send errors are considered processed and are not retried.
-				if err == nil || !msg.pipe.stopped.Load() {
+				// Fork: uncertain sends (may have been delivered) aren't retained,
+				// so that a resume doesn't send them again.
+				if !msg.pipe.stopped.Load() || !keepForResume(err) {
 					msg.pipe.completeSub(msg.Subscriber.ID)
 				}
 				msg.pipe.wg.Done()

@@ -11,6 +11,10 @@ import (
 const (
 	MessageSent   = "sent"
 	MessageFailed = "failed"
+
+	// MessageUncertain is a failure that may have been delivered anyway (the
+	// connection broke mid-send). It's never resent automatically.
+	MessageUncertain = "uncertain"
 )
 
 const (
@@ -54,6 +58,9 @@ func (m *Manager) logMessage(campID, subID int, err error) {
 	l := MessageLog{CampaignID: campID, SubscriberID: subID, Status: MessageSent}
 	if err != nil {
 		l.Status = MessageFailed
+		if isUncertainSendErr(err) {
+			l.Status = MessageUncertain
+		}
 		l.Temporary = isTemporarySendErr(err)
 		l.Error = err.Error()
 		if len(l.Error) > msgLogMaxErrLen {
