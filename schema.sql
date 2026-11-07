@@ -178,12 +178,14 @@ CREATE TABLE campaign_messages (
     status         TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'uncertain')),
     error          TEXT NOT NULL DEFAULT '',
     attempts       INTEGER NOT NULL DEFAULT 1,
+    retry_at       TIMESTAMP WITH TIME ZONE NULL,
     created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     PRIMARY KEY (campaign_id, subscriber_id)
 );
 CREATE INDEX idx_camp_msgs_sub ON campaign_messages(subscriber_id);
 CREATE INDEX idx_camp_msgs_unsent ON campaign_messages(campaign_id, status) WHERE status != 'sent';
+CREATE INDEX idx_camp_msgs_retry ON campaign_messages(retry_at) WHERE retry_at IS NOT NULL;
 
 DROP TABLE IF EXISTS campaign_views CASCADE;
 CREATE TABLE campaign_views (

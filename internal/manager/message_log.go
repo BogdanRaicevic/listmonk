@@ -26,6 +26,10 @@ type MessageLog struct {
 	SubscriberID int
 	Status       string
 	Error        string
+
+	// Temporary is true for a failure that is safe and worth retrying: the
+	// e-mail certainly wasn't delivered and the cause may go away.
+	Temporary bool
 }
 
 // messageLog buffers outcomes and writes them to the store in batches so that
@@ -50,6 +54,7 @@ func (m *Manager) logMessage(campID, subID int, err error) {
 	l := MessageLog{CampaignID: campID, SubscriberID: subID, Status: MessageSent}
 	if err != nil {
 		l.Status = MessageFailed
+		l.Temporary = isTemporarySendErr(err)
 		l.Error = err.Error()
 		if len(l.Error) > msgLogMaxErrLen {
 			l.Error = l.Error[:msgLogMaxErrLen]
