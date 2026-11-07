@@ -372,10 +372,17 @@ func (a *App) BounceWebhook(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
 	}
 
-	// Insert bounces into the DB.
+	// Insert bounces into the DB before answering. Fork: if one can't be stored,
+	// answer with an error so that the provider retries the notification instead
+	// of the bounce being lost (re-delivered bounces are de-duplicated). Invalid
+	// bounces (4xx) are logged and skipped, as retrying wouldn't help.
 	for _, b := range bounces {
 		if err := a.bounce.Record(b); err != nil {
 			a.log.Printf("error recording bounce: %v", err)
+			if code := echo.StatusCode(err); code >= 400 && code < 500 {
+				continue
+			}
+			return echo.NewHTTPError(http.StatusServiceUnavailable, a.i18n.T("public.errorProcessingRequest"))
 		}
 	}
 
