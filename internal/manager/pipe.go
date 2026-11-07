@@ -161,6 +161,9 @@ func (p *pipe) NextSubscribers() (bool, error) {
 					wait.Round(time.Second)*1)
 
 				p.m.slidingCount = 0
+
+				// Fork: let /health/sending know that this pause is deliberate.
+				p.m.slidingUntil.Store(time.Now().Add(wait).UnixNano())
 				time.Sleep(wait)
 			}
 		}
