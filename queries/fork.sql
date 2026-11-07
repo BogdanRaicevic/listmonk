@@ -103,10 +103,12 @@ SELECT COUNT(*) FROM upd;
 
 -- name: get-campaign-message-counts
 -- Counts of a campaign's logged e-mails that weren't sent: failed, uncertain
--- (may have been delivered), and failed ones pending a retry.
+-- (may have been delivered), and failed ones pending a retry; and whether the
+-- campaign is finished (only finished campaigns are resent).
 SELECT COUNT(*) FILTER (WHERE status = 'failed') AS failed,
        COUNT(*) FILTER (WHERE status = 'uncertain') AS uncertain,
-       COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying
+       COUNT(*) FILTER (WHERE status = 'failed' AND retry_at IS NOT NULL) AS retrying,
+       COALESCE((SELECT status = 'finished' FROM campaigns WHERE id = $1), FALSE) AS finished
 FROM campaign_messages WHERE campaign_id = $1 AND status != 'sent';
 
 -- name: apply-complaint-to-email-variants

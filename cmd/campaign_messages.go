@@ -51,9 +51,10 @@ func (a *App) hasCampaignMessages(campID int) bool {
 // campaignMessageCounts is the summary of a campaign's logged e-mails that
 // weren't sent.
 type campaignMessageCounts struct {
-	Failed    int `db:"failed"`
-	Uncertain int `db:"uncertain"`
-	Retrying  int `db:"retrying"`
+	Failed    int  `db:"failed"`
+	Uncertain int  `db:"uncertain"`
+	Retrying  int  `db:"retrying"`
+	Finished  bool `db:"finished"`
 }
 
 // getCampaignMessageCounts returns how many of a campaign's e-mails weren't sent
@@ -90,6 +91,11 @@ func (a *App) ResendCampaignFailed(c *echo.Context) error {
 	if err := a.queries.ScheduleCampaignResend.Get(&n, id); err != nil {
 		a.log.Printf("error scheduling campaign resend: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.Ts("globals.messages.errorUpdating", "name", "campaign", "error", err.Error()))
+	}
+
+	// Nothing to resend: no failed e-mails, or the campaign isn't finished.
+	if n == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("analytics.resendNone"))
 	}
 
 	return c.JSON(http.StatusOK, okResp{map[string]int{"scheduled": n}})
