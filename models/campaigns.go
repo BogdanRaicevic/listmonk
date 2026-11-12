@@ -29,6 +29,11 @@ const (
 	CampaignContentTypeMarkdown = "markdown"
 	CampaignContentTypePlain    = "plain"
 	CampaignContentTypeVisual   = "visual"
+
+	// BotTrapMarker is in the URL of a hidden link added to every HTML campaign
+	// e-mail (fork). People never see it, but mail security scanners that open every
+	// link do, which tells their clicks apart from human ones.
+	BotTrapMarker = "lm-bot-check"
 )
 
 // CampOpt is a campaign manager option type.
@@ -250,6 +255,11 @@ func (c *Campaign) CompileTemplate(f template.FuncMap) error {
 		body = b.String()
 	} else {
 		body = c.Body
+	}
+
+	// Fork: add the hidden bot-trap link (see BotTrapMarker) to e-mails that render HTML.
+	if _, ok := f["BotTrap"]; ok && c.ContentType != CampaignContentTypePlain {
+		body += `{{ BotTrap . }}`
 	}
 
 	// Compile the campaign message.

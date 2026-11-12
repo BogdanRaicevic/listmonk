@@ -95,7 +95,22 @@ func newCampaignAudience(id int, name string, exact bool) campaignAudience {
 		clicked   = fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM link_clicks WHERE campaign_id = %d AND subscriber_id IS NOT NULL)`, id)
 		bounced   = fmt.Sprintf(`subscribers.id IN (SELECT subscriber_id FROM bounces WHERE campaign_id = %d)`, id)
 		recipient = `subscribers.status != 'blocklisted' AND ` + fmt.Sprintf(sentExp, id, subActiveCond)
-		unsubbed  = fmt.Sprintf(sentExp, id, subUnsubAfterCond)
+
+		// A mail security scanner opens every link, including the hidden bot trap
+		// (models.BotTrapMarker), in one burst. A click within 2 minutes of the same
+		// subscriber's trap click is the scanner's; a later one is the person's.
+		// shortcut: scanners that skip hidden links still count as human; add a
+		// "clicked every link" rule if they show up.
+		humanClicked = fmt.Sprintf(`subscribers.id IN (
+  SELECT lc.subscriber_id FROM link_clicks lc JOIN links ON links.id = lc.link_id
+  WHERE lc.campaign_id = %[1]d AND lc.subscriber_id IS NOT NULL AND links.url NOT LIKE '%%%[2]s%%'
+    AND NOT EXISTS (
+      SELECT 1 FROM link_clicks t JOIN links tl ON tl.id = t.link_id
+      WHERE t.campaign_id = %[1]d AND t.subscriber_id = lc.subscriber_id AND tl.url LIKE '%%%[2]s%%'
+        AND t.created_at BETWEEN lc.created_at - INTERVAL '2 minutes' AND lc.created_at + INTERVAL '2 minutes'
+    )
+)`, id, models.BotTrapMarker)
+		unsubbed = fmt.Sprintf(sentExp, id, subUnsubAfterCond)
 	)
 
 	return campaignAudience{
@@ -110,6 +125,8 @@ func newCampaignAudience(id int, name string, exact bool) campaignAudience {
 			{Key: "not-opened", Label: "analytics.notOpened", Query: recipient + " AND NOT (" + viewed + ")"},
 			{Key: "clicked", Label: "analytics.clicked", Query: clicked},
 			{Key: "not-clicked", Label: "analytics.notClicked", Query: recipient + " AND NOT (" + clicked + ")"},
+			{Key: "clicked-human", Label: "analytics.clickedHuman", Query: humanClicked},
+			{Key: "not-clicked-human", Label: "analytics.notClickedHuman", Query: recipient + " AND NOT (" + humanClicked + ")"},
 			{Key: "bounced", Label: "analytics.bounced", Query: bounced},
 
 			// Unsubscribed from the campaign's list(s) only.

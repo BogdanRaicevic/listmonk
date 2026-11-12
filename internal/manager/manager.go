@@ -412,6 +412,21 @@ func (m *Manager) TemplateFuncs(c *models.Campaign, opts ...models.CampOpt) temp
 
 			return m.trackLink(url, msg.Campaign.UUID, subUUID)
 		},
+		// Fork: a hidden, empty link that only bots follow. See models.BotTrapMarker.
+		"BotTrap": func(msg *CampaignMessage) template.HTML {
+			if m.cfg.DisableTracking {
+				return template.HTML("")
+			}
+
+			subUUID := msg.Subscriber.UUID
+			if !m.cfg.IndividualTracking {
+				subUUID = dummyUUID
+			}
+
+			url := m.trackLink(m.cfg.RootURL+"/?"+models.BotTrapMarker, msg.Campaign.UUID, subUUID)
+			return template.HTML(fmt.Sprintf(`<a href="%s" aria-hidden="true" tabindex="-1" style="display:none;font-size:0;line-height:0;max-height:0;max-width:0;overflow:hidden;mso-hide:all"></a>`,
+				template.HTMLEscapeString(url)))
+		},
 		"TrackView": func(msg *CampaignMessage) template.HTML {
 			if m.cfg.DisableTracking {
 				return template.HTML("")
