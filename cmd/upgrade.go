@@ -51,6 +51,7 @@ var migList = []migFunc{
 	{"v7.0.1-fork.3", migrations.V7_0_1_Fork3}, // Fork-only (failed send retries).
 	{"v7.0.1-fork.4", migrations.V7_0_1_Fork4}, // Fork-only (canonical e-mail for complaints).
 	{"v7.0.1-fork.5", migrations.V7_0_1_Fork5}, // Fork-only (campaign contact limits).
+	{"v7.0.1-fork.6", migrations.V7_0_1_Fork6}, // Fork-only (re-run upstream's v7.0.0 additions, eg: media tags).
 }
 
 // upgrade upgrades the database to the current version by running SQL migration files
