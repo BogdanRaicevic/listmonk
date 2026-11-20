@@ -257,9 +257,15 @@ func (c *Campaign) CompileTemplate(f template.FuncMap) error {
 		body = c.Body
 	}
 
-	// Fork: add the hidden bot-trap link (see BotTrapMarker) to e-mails that render HTML.
-	if _, ok := f["BotTrap"]; ok && c.ContentType != CampaignContentTypePlain {
-		body += `{{ BotTrap . }}`
+	// Fork: track every link and add the hidden bot-trap link (see BotTrapMarker)
+	// in e-mails that render HTML.
+	if c.ContentType != CampaignContentTypePlain {
+		if _, ok := f["TrackLink"]; ok {
+			body = autoTrackLinks(body)
+		}
+		if _, ok := f["BotTrap"]; ok {
+			body += `{{ BotTrap . }}`
+		}
 	}
 
 	// Compile the campaign message.
