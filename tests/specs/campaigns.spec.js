@@ -608,6 +608,51 @@ test('excludes subscribers in exclusion lists from delivery', async ({ page }) =
   expect(to).toEqual(['<a@exclude.example.com>', '<c@exclude.example.com>']);
 });
 
+test('skips subscribers e-mailed too often or who ignored their last e-mails', async ({ page }) => {
+  const list = async (name) => data(await page.request.post('/api/lists', { data: { name, type: 'private', optin: 'single' } }));
+  const warm = await list('Contact warm');
+  const target = await list('Contact target');
+  const subs = {};
+  for (const name of ['a', 'b', 'c']) {
+    subs[name] = await data(await page.request.post('/api/subscribers', { data: {
+      email: `${name}@contact.example.com`, name, status: 'enabled', lists: name === 'c' ? [target.id] : [warm.id, target.id],
+    } }));
+  }
+
+  // a and b get two e-mails; b opens one of them.
+  const sent = [];
+  for (const i of [1, 2]) {
+    const c = await create(page, { subject: `Contact warm ${i} ${Date.now()}`, lists: [warm.id] });
+    await data(await page.request.put(`/api/campaigns/${c.id}/status`, { data: { status: 'running' } }));
+    await expect.poll(async () => (await campaign(page, c.id)).status, { timeout: 20000 }).toBe('finished');
+    sent.push(c.id);
+  }
+  psql(`INSERT INTO campaign_views (campaign_id, subscriber_id) VALUES (${sent[0]}, ${subs.b.id})`);
+
+  const previewFor = async (rules) => data(await page.request.post('/api/campaigns/audience-preview', { data: {
+    lists: [target.id], contact_window_days: 30, ...rules,
+  } }));
+  // The message log is flushed asynchronously, after the campaign finishes.
+  await expect.poll(async () => (await previewFor({ skip_contacted_min: 2 })).skipped, { timeout: 20000 }).toBe(2);
+  expect(await previewFor({})).toMatchObject({ total: 3, contacted: 2, contacted_1_2: 2, skipped: 0 });
+  expect(await previewFor({ skip_unopened_last: 2 })).toMatchObject({ unopened: 1, skipped: 1 });
+
+  // The list page shows the overlap with the warm list.
+  await page.goto(`/admin/lists/${target.id}`);
+  await expect(page.getByTestId('list-overlap')).toContainText('2 of 3 subscribers are also in other lists');
+
+  const c = await create(page, { subject: `Contact skip ${Date.now()}`, lists: [target.id], skip_unopened_last: 2 });
+  await page.goto(`${CAMPAIGNS}/${c.id}`);
+  await expect(page.getByTestId('contact-preview')).toContainText('Skipped by the rules above: 1. Will receive: 2');
+
+  await data(await page.request.put(`/api/campaigns/${c.id}/status`, { data: { status: 'running' } }));
+  await expect.poll(async () => (await campaign(page, c.id)).status, { timeout: 20000 }).toBe('finished');
+  expect(await campaign(page, c.id)).toMatchObject({ to_send: 2, sent: 2 });
+  await expect.poll(async () => (await getMail()).filter((m) => m.Content.Headers.Subject?.[0] === c.subject)
+    .map((m) => m.Content.Headers.To[0]).sort(), { timeout: 20000 })
+    .toEqual(['<b@contact.example.com>', '<c@contact.example.com>']);
+});
+
 test('starts, pauses, resumes and cancels from the listing', async ({ page }) => {
   // Keep sending long enough to change status at the default rate of 10 messages/s.
   const list = await data(await page.request.post('/api/lists', { data: { name: 'Slow audience', type: 'private', optin: 'single' } }));

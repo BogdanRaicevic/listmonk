@@ -50,6 +50,43 @@
 			</div>
 		{{ end }}
 	</section>
+	{{- $o := $d.Overlap }}
+	{{- $view := URI "/admin/subscribers" }}{{ $exp := URI "/api/subscribers/export" }}
+	<article class="card float" data-testid="list-overlap">
+		<h5 class="title">{{ Icon "copy" }} {{ .L.T "lists.overlap" }}</h5>
+		<p>
+			{{ .L.Ts "lists.overlapSummary" "num" (FormatNumber $o.InOther) "total" (FormatNumber $o.Members) "avg" (printf "%.1f" $o.AvgOther) }}
+			{{- if gt $o.InOther 0 }}
+				<a href="{{ $view }}?query={{ $o.InOtherQuery }}" data-testid="overlap-view">{{ .L.T "globals.buttons.view" }}</a>
+				<a href="{{ $exp }}?columns=slim&amp;query={{ $o.InOtherQuery }}" download="list-{{ $l.ID }}-in-other-lists.csv" title="{{ .L.T "globals.buttons.export" }}" aria-label="{{ .L.T "globals.buttons.export" }}">{{ Icon "download-cloud" }}</a>
+			{{- end }}
+		</p>
+		<p {{ if gt $o.Variants 0 }}role="alert" data-variant="warning"{{ end }} data-testid="overlap-variants">
+			{{ .L.Ts "lists.overlapVariants" "num" (FormatNumber $o.Variants) }}
+			{{- if gt $o.Variants 0 }}
+				<a href="{{ $view }}?query={{ $o.VariantsQuery }}">{{ .L.T "globals.buttons.view" }}</a>
+				<a href="{{ $exp }}?columns=slim&amp;query={{ $o.VariantsQuery }}" download="list-{{ $l.ID }}-address-variants.csv" title="{{ .L.T "globals.buttons.export" }}" aria-label="{{ .L.T "globals.buttons.export" }}">{{ Icon "download-cloud" }}</a>
+			{{- end }}
+		</p>
+		{{- if $o.TopLists }}
+		<div class="table-wrapper">
+			<table>
+				<thead><tr><th>{{ .L.T "lists.overlapList" }}</th><th>{{ .L.T "lists.overlapShared" }}</th></tr></thead>
+				<tbody>
+					{{- range $o.TopLists }}
+					<tr>
+						<td><a href="{{ URI "/admin/lists" }}/{{ .ID }}">{{ .Name }}</a></td>
+						<td style="white-space: nowrap">
+							<a href="{{ $view }}?query={{ .Query }}">{{ FormatNumber .Count }}</a>
+							<a href="{{ $exp }}?columns=slim&amp;query={{ .Query }}" download="list-{{ $l.ID }}-and-{{ .ID }}.csv" title="{{ $.L.T "globals.buttons.export" }}" aria-label="{{ $.L.T "globals.buttons.export" }}: {{ .Name }}">{{ Icon "download-cloud" }}</a>
+						</td>
+					</tr>
+					{{- end }}
+				</tbody>
+			</table>
+		</div>
+		{{- end }}
+	</article>
 	<section class="row">
 		<div class="col-6">
 			<article class="card float">

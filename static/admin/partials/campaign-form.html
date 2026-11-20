@@ -35,6 +35,32 @@
 				{{ template "list-selector" dict "Root" $root "Model" "form.exclude_lists" "ListID" "campaign-exclude-lists" "Placeholder" "campaigns.excludeListsPlaceholder" "Hint" "campaigns.excludeListsHelp" "Disabled" "!canEdit" }}
 			</fieldset>
 
+			<fieldset class="card" data-testid="campaign-contact">
+				<legend>{{ $root.L.T "campaigns.contact" }}</legend>
+				<div class="row">
+					<label data-field class="col-4">
+						{{ $root.L.T "campaigns.contactWindow" }}
+						<input type="number" name="contact_window_days" min="1" max="365" x-model.number="form.contact_window_days" :disabled="!canEdit" required />
+					</label>
+					<label data-field class="col-4">
+						{{ $root.L.T "campaigns.skipContacted" }}
+						<input type="number" name="skip_contacted_min" min="0" max="1000" x-model.number="form.skip_contacted_min" :disabled="!canEdit" />
+						<small data-hint>{{ $root.L.T "campaigns.skipContactedHelp" }}</small>
+					</label>
+					<label data-field class="col-4">
+						{{ $root.L.T "campaigns.skipUnopened" }}
+						<input type="number" name="skip_unopened_last" min="0" max="100" x-model.number="form.skip_unopened_last" :disabled="!canEdit" />
+						<small data-hint>{{ $root.L.T "campaigns.skipUnopenedHelp" }}</small>
+					</label>
+				</div>
+				<div data-testid="contact-preview" :aria-busy="isLoading('contact')">
+					<template x-for="[text, warn] in contactLines">
+						<p :role="warn ? 'alert' : null" :data-variant="warn ? 'warning' : null" x-text="text"></p>
+					</template>
+					<small data-hint x-show="contact" x-text="contactLogSince"></small>
+				</div>
+			</fieldset>
+
 			<fieldset class="card">
 				<legend>{{ $root.L.Tc "globals.terms.messenger" 1 }}</legend>
 				<div data-field>

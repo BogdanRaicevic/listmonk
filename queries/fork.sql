@@ -192,3 +192,58 @@ SELECT
         ) THEN 1 ELSE 0 END
         FROM (SELECT COALESCE(SUM(n), 0) AS n FROM recent_failures) f
     ) AS failing;
+
+-- name: preview-campaign-audience
+-- Who a campaign on lists $1 minus exclusion lists $2 would reach, and how often
+-- they were e-mailed in the last $3 days. $4 and $6 are the skip rules (recent
+-- sends, and whether to skip those who ignored their last $5 e-mails). $7 is the
+-- campaign being edited (0 for a new one), whose own e-mails don't count.
+WITH recipients AS (
+    SELECT DISTINCT s.id FROM subscriber_lists sl
+    JOIN lists l ON l.id = sl.list_id
+    JOIN subscribers s ON s.id = sl.subscriber_id
+    WHERE sl.list_id = ANY($1::INT[]) AND s.status != 'blocklisted'
+        AND ((l.optin = 'double' AND sl.status = 'confirmed') OR (l.optin != 'double' AND sl.status != 'unsubscribed'))
+        AND NOT EXISTS (SELECT 1 FROM subscriber_lists esl WHERE esl.subscriber_id = s.id AND esl.list_id = ANY($2::INT[]))
+),
+r AS (
+    SELECT fork_recent_sends(id, $3, $7) AS n, fork_ignored_last(id, $5, $7) AS ignored FROM recipients
+)
+SELECT COUNT(*) AS total,
+    COUNT(*) FILTER (WHERE n > 0) AS contacted,
+    COUNT(*) FILTER (WHERE n BETWEEN 1 AND 2) AS contacted_1_2,
+    COUNT(*) FILTER (WHERE n BETWEEN 3 AND 6) AS contacted_3_6,
+    COUNT(*) FILTER (WHERE n >= 7) AS contacted_7_plus,
+    COUNT(*) FILTER (WHERE ignored) AS unopened,
+    COUNT(*) FILTER (WHERE ($4 > 0 AND n >= $4) OR ($6 AND ignored)) AS skipped,
+    -- The message log is only as old as its first campaign.
+    (SELECT created_at FROM campaign_messages ORDER BY campaign_id LIMIT 1) AS log_since
+FROM r;
+
+-- name: get-list-overlap
+-- How many of list $1's subscribers are also in other lists (that the user can
+-- see: $2 all lists, or $3), the 10 lists they overlap most with, and how many
+-- share a mailbox with another subscriber under a variant address.
+WITH members AS (
+    SELECT subscriber_id FROM subscriber_lists WHERE list_id = $1 AND status != 'unsubscribed'
+),
+other AS (
+    SELECT sl.subscriber_id, sl.list_id FROM subscriber_lists sl JOIN members m USING (subscriber_id)
+    WHERE sl.list_id != $1 AND sl.status != 'unsubscribed' AND ($2 OR sl.list_id = ANY($3::INT[]))
+),
+perSub AS (
+    SELECT subscriber_id, COUNT(*) AS n FROM other GROUP BY subscriber_id
+),
+top AS (
+    SELECT o.list_id AS id, l.name, COUNT(*) AS count FROM other o JOIN lists l ON l.id = o.list_id
+    GROUP BY o.list_id, l.name ORDER BY count DESC, o.list_id LIMIT 10
+)
+SELECT (SELECT COUNT(*) FROM members) AS members,
+    (SELECT COUNT(*) FROM perSub) AS in_other,
+    (SELECT COALESCE(ROUND(AVG(n), 1), 0) FROM perSub) AS avg_other,
+    (SELECT COALESCE(JSON_AGG(top ORDER BY count DESC, id), '[]') FROM top) AS top_lists,
+    (SELECT COUNT(*) FROM members m JOIN subscribers s ON s.id = m.subscriber_id
+        WHERE EXISTS (
+            SELECT 1 FROM subscribers s2
+            WHERE fork_canonical_email(s2.email) = fork_canonical_email(s.email) AND s2.id != s.id
+        )) AS variants;

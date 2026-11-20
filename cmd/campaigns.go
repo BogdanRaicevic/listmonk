@@ -904,6 +904,13 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 		}
 	}
 
+	if c.ContactWindowDays == 0 {
+		c.ContactWindowDays = 30
+	}
+	if !validContactRules(c.ContactWindowDays, c.SkipContactedMin, c.SkipUnopenedLast) {
+		return c, errors.New(a.i18n.T("campaigns.fieldInvalidContactRules"))
+	}
+
 	if !a.manager.HasMessenger(c.Messenger) {
 		// If it's a specific SMTP, but it's no longer available (removed/disabled), fall back to general email messenger.
 		if strings.HasPrefix(c.Messenger, "email-") {

@@ -162,6 +162,8 @@ type Queries struct {
 	ApplyComplaintToVariants     *sqlx.Stmt `query:"apply-complaint-to-email-variants"`
 	IsEmailSuppressed            *sqlx.Stmt `query:"is-email-suppressed"`
 	GetSendingHealth             *sqlx.Stmt `query:"get-sending-health"`
+	PreviewCampaignAudience      *sqlx.Stmt `query:"preview-campaign-audience"`
+	GetListOverlap               *sqlx.Stmt `query:"get-list-overlap"`
 }
 
 // ApplyOrphanFilter handles the special subscription_status value "none", which

@@ -206,6 +206,7 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 
 		g.GET("/api/campaigns", pm(a.GetCampaigns, auth.PermCampaignsGetAll, auth.PermCampaignsGet))
 		g.GET("/api/campaigns/running/stats", pm(a.GetRunningCampaignStats, auth.PermCampaignsGetAll, auth.PermCampaignsGet))
+		g.POST("/api/campaigns/audience-preview", pm(a.PreviewCampaignAudience, auth.PermCampaignsGetAll, auth.PermCampaignsGet)) // Fork: contact pressure.
 		g.GET("/api/campaigns/:id", pm(hasID(a.GetCampaign), auth.PermCampaignsGetAll, auth.PermCampaignsGet))
 		g.GET("/api/campaigns/analytics/:type", pm(a.GetCampaignViewAnalytics, auth.PermCampaignsGetAnalytics))
 		g.POST("/api/campaigns/:id/resend-failed", pm(hasID(a.ResendCampaignFailed), auth.PermCampaignsManage, auth.PermCampaignsManageAll)) // Fork: resend failed e-mails.

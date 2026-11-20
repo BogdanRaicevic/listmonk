@@ -90,6 +90,12 @@ type Campaign struct {
 	ArchiveMeta       json.RawMessage `db:"archive_meta" json:"archive_meta"`
 	LastSubscriberID  int             `db:"last_subscriber_id" json:"-"`
 
+	// Fork: skip subscribers sent SkipContactedMin+ e-mails in the last
+	// ContactWindowDays, or who ignored their last SkipUnopenedLast e-mails. 0 = off.
+	ContactWindowDays int `db:"contact_window_days" json:"contact_window_days"`
+	SkipContactedMin  int `db:"skip_contacted_min" json:"skip_contacted_min"`
+	SkipUnopenedLast  int `db:"skip_unopened_last" json:"skip_unopened_last"`
+
 	// TemplateBody is joined in from templates by the next-campaigns query.
 	TemplateBody        string       `db:"template_body" json:"-"`
 	ArchiveTemplateBody string       `db:"archive_template_body" json:"-"`

@@ -145,6 +145,12 @@ CREATE TABLE campaigns (
     archive_template_id INTEGER REFERENCES templates(id) ON DELETE SET NULL,
     archive_meta        JSONB NOT NULL DEFAULT '{}',
 
+    -- Fork: skip subscribers sent skip_contacted_min+ e-mails in the last
+    -- contact_window_days, or who ignored their last skip_unopened_last e-mails. 0 = off.
+    contact_window_days INT NOT NULL DEFAULT 30,
+    skip_contacted_min  INT NOT NULL DEFAULT 0,
+    skip_unopened_last  INT NOT NULL DEFAULT 0,
+
     started_at       TIMESTAMP WITH TIME ZONE,
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -527,3 +533,25 @@ CREATE MATERIALIZED VIEW mat_list_charts AS
     FROM counts
     GROUP BY list_id, date;
 CREATE UNIQUE INDEX mat_list_charts_idx ON mat_list_charts (list_id, date);
+
+-- Fork: how many e-mails a subscriber was sent in the last `days` days, and
+-- whether they neither opened nor clicked any of their last `n` e-mails, not
+-- counting campaign `camp`. Used by campaign skip rules and the audience preview.
+CREATE OR REPLACE FUNCTION fork_recent_sends(sub INT, days INT, camp INT) RETURNS INT
+LANGUAGE sql STABLE PARALLEL SAFE AS $fn$
+    SELECT COUNT(*)::INT FROM campaign_messages
+    WHERE subscriber_id = sub AND status = 'sent' AND campaign_id != camp
+        AND updated_at > NOW() - MAKE_INTERVAL(days => days)
+$fn$;
+
+CREATE OR REPLACE FUNCTION fork_ignored_last(sub INT, n INT, camp INT) RETURNS BOOLEAN
+LANGUAGE sql STABLE PARALLEL SAFE AS $fn$
+    WITH m AS (
+        SELECT campaign_id FROM campaign_messages
+        WHERE subscriber_id = sub AND status = 'sent' AND campaign_id != camp
+        ORDER BY updated_at DESC LIMIT n
+    )
+    SELECT n > 0 AND (SELECT COUNT(*) FROM m) = n
+        AND NOT EXISTS (SELECT 1 FROM campaign_views v JOIN m USING (campaign_id) WHERE v.subscriber_id = sub)
+        AND NOT EXISTS (SELECT 1 FROM link_clicks c JOIN m USING (campaign_id) WHERE c.subscriber_id = sub)
+$fn$;

@@ -25,7 +25,8 @@ WITH tpl AS (
 camp AS (
     INSERT INTO campaigns (uuid, type, name, subject, from_email, body, altbody,
         content_type, send_at, headers, attribs, tags, messenger, template_id, to_send,
-        max_subscriber_id, archive, archive_slug, archive_template_id, archive_meta, body_source)
+        max_subscriber_id, archive, archive_slug, archive_template_id, archive_meta, body_source,
+        contact_window_days, skip_contacted_min, skip_unopened_last)
         SELECT $1, $2, $3, $4, $5,
             -- body
             COALESCE(NULLIF($6, ''), (SELECT body FROM tpl), ''),
@@ -40,7 +41,8 @@ camp AS (
             $18,
             $19,
             -- body_source
-            COALESCE($21, (SELECT body_source FROM tpl))
+            COALESCE($21, (SELECT body_source FROM tpl)),
+            $23, $24, $25
         RETURNING id
 ),
 med AS (
@@ -234,6 +236,9 @@ counts AS (
         JOIN subscriber_lists esl ON (esl.list_id = cel.list_id AND esl.subscriber_id = sl.subscriber_id)
         WHERE cel.campaign_id = camps.id
     )
+    -- (fork) campaign skip rules, as in next-campaign-subscribers.
+    AND NOT (camps.skip_contacted_min > 0 AND fork_recent_sends(sl.subscriber_id, camps.contact_window_days, camps.id) >= camps.skip_contacted_min)
+    AND NOT (camps.skip_unopened_last > 0 AND fork_ignored_last(sl.subscriber_id, camps.skip_unopened_last, camps.id))
     GROUP BY camps.id
 ),
 updateCounts AS (
@@ -321,6 +326,7 @@ SELECT link_clicks.campaign_id,
 -- Returns the metadata for a running campaign that is required by next-campaign-subscribers to retrieve
 -- a batch of campaign subscribers for processing.
 SELECT campaigns.id AS campaign_id, campaigns.type as campaign_type, max_subscriber_id, lists.id AS list_id,
+    contact_window_days, skip_contacted_min, skip_unopened_last,
     (
         SELECT COALESCE(ARRAY_AGG(list_id), '{}') FROM campaign_exclude_lists
         WHERE campaign_id = campaigns.id AND list_id IS NOT NULL
@@ -371,6 +377,9 @@ subs AS (
                 SELECT 1 FROM campaign_messages cm
                 WHERE cm.campaign_id = $1 AND cm.subscriber_id = s.id AND cm.status != 'failed'
             )
+            -- (fork) campaign skip rules: $8 window days, $9 max recent sends, $10 last e-mails ignored.
+            AND NOT ($9 > 0 AND fork_recent_sends(s.id, $8, $1) >= $9)
+            AND NOT ($10 > 0 AND fork_ignored_last(s.id, $10, $1))
             AND (
                 -- If it's an optin campaign and the list is double-optin, only pick unconfirmed subscribers.
                 ($2 = 'optin' AND sl.status = 'unconfirmed' AND campLists.optin = 'double')
@@ -436,6 +445,9 @@ WITH camp AS (
         archive_template_id=(CASE WHEN $7::content_type = 'visual' THEN NULL ELSE $17::INT END),
         archive_meta=$18,
         body_source=$20,
+        contact_window_days=$22,
+        skip_contacted_min=$23,
+        skip_unopened_last=$24,
         updated_at=NOW()
     WHERE id = $1 RETURNING id
 ),

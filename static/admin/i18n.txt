@@ -104,3 +104,12 @@ globals.terms.finished
 globals.terms.paused
 globals.terms.running
 globals.terms.scheduled
+
+# Fork: campaign contact frequency preview.
+campaigns.contactRecipients
+campaigns.contactContacted
+campaigns.contactBuckets
+campaigns.contactHeavy
+campaigns.contactUnopened
+campaigns.contactSkipped
+campaigns.contactLogSince

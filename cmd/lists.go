@@ -45,6 +45,7 @@ type listView struct {
 	List                  models.List
 	Campaigns             []models.Campaign
 	Page                  models.PageProps
+	Overlap               listOverlap
 }
 
 // publicListForm is the minimal list representation used by the forms view.
@@ -134,6 +135,9 @@ func (a *App) ViewList(c *echo.Context) error {
 		data.CacheSlowQueries = ko.Bool("app.cache_slow_queries")
 		data.Charts, err = a.core.GetListCharts(id, data.CanViewCampaignCharts)
 		if err != nil {
+			return err
+		}
+		if data.Overlap, err = a.getListOverlap(user, id); err != nil {
 			return err
 		}
 	}

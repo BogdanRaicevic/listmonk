@@ -51,6 +51,9 @@ function component(camp, sel) {
     _mediaTarget: null,
     _saved: false,
 
+    contact: null,
+    _contactTimer: null,
+
     preview: {
       title: c.name || '', url: '', loading: true, templateID: null, contentType: '', archiveMeta: '', body: '',
     },
@@ -68,6 +71,9 @@ function component(camp, sel) {
       tags: Array.isArray(c.tags) ? c.tags : [],
       lists: lists.map((l) => new ListTag(l)),
       exclude_lists: (Array.isArray(c.exclude_lists) ? c.exclude_lists : []).map((l) => new ListTag(l)),
+      contact_window_days: c.contact_window_days || 30,
+      skip_contacted_min: c.skip_contacted_min || 0,
+      skip_unopened_last: c.skip_unopened_last || 0,
       template_id: c.template_id || null,
       body: c.body || '',
       body_source: c.body_source || null,
@@ -96,6 +102,10 @@ function component(camp, sel) {
         }
       }
 
+      // Fork: refresh the contact preview when the audience or skip rules change.
+      this.$watch(() => JSON.stringify(this._contactReq()), () => this.loadContact());
+      this.loadContact();
+
       // Mount content editor plugins only when the 'content' tab is active.
       try {
         if (new URLSearchParams(window.location.hash.slice(1)).get('tab') === 'content') {
@@ -122,6 +132,66 @@ function component(camp, sel) {
           this.onPickMedia(e.data.media);
         }
       });
+    },
+
+    _contactReq() {
+      return {
+        campaign_id: this.form.id || 0,
+        lists: this.form.lists.map((l) => l.id).filter(Boolean),
+        exclude_lists: this.form.exclude_lists.map((l) => l.id).filter(Boolean),
+        contact_window_days: Number(this.form.contact_window_days) || 30,
+        skip_contacted_min: Number(this.form.skip_contacted_min) || 0,
+        skip_unopened_last: Number(this.form.skip_unopened_last) || 0,
+      };
+    },
+
+    loadContact() {
+      clearTimeout(this._contactTimer);
+      this._contactTimer = setTimeout(async () => {
+        const req = this._contactReq();
+        if (req.lists.length === 0) {
+          this.contact = null;
+          return;
+        }
+        try {
+          this.contact = await api('contact', '/campaigns/audience-preview', 'POST', req);
+        } catch {
+          this.contact = null;
+        }
+      }, 400);
+    },
+
+    // Lines of the contact preview: [text, isWarning].
+    get contactLines() {
+      const c = this.contact;
+      if (!c) {
+        return [];
+      }
+      const n = u.formatNumber;
+      const pct = (v) => (c.total ? Math.round((v / c.total) * 100) : 0);
+      const days = this._contactReq().contact_window_days;
+
+      const out = [
+        [i18n.ts('campaigns.contactRecipients', { num: n(c.total) }), false],
+        [i18n.ts('campaigns.contactContacted', {
+          num: n(c.contacted), total: n(c.total), pct: pct(c.contacted), days,
+        }), false],
+        [i18n.ts('campaigns.contactBuckets', { a: n(c.contacted_1_2), b: n(c.contacted_3_6), c: n(c.contacted_7_plus) }), false],
+      ];
+      if (c.contacted_7_plus > 0) {
+        out.push([i18n.ts('campaigns.contactHeavy', {
+          num: n(c.contacted_7_plus), total: n(c.total), pct: pct(c.contacted_7_plus), days,
+        }), pct(c.contacted_7_plus) >= 20]);
+      }
+      out.push([i18n.ts('campaigns.contactUnopened', { num: n(c.unopened), last: c.unopened_last }), false]);
+      if (c.skipped > 0) {
+        out.push([i18n.ts('campaigns.contactSkipped', { num: n(c.skipped), left: n(c.total - c.skipped) }), false]);
+      }
+      return out;
+    },
+
+    get contactLogSince() {
+      return this.contact?.log_since ? i18n.ts('campaigns.contactLogSince', { date: u.niceDate(this.contact.log_since) }) : '';
     },
 
     // ===============
@@ -250,6 +320,9 @@ function component(camp, sel) {
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
         exclude_lists: this.form.exclude_lists.filter((l) => l.id).map((l) => l.id),
+        contact_window_days: Number(this.form.contact_window_days) || 30,
+        skip_contacted_min: Number(this.form.skip_contacted_min) || 0,
+        skip_unopened_last: Number(this.form.skip_unopened_last) || 0,
         from_email: this.form.from_email,
         messenger: this.form.messenger,
         type: 'regular',
@@ -282,6 +355,9 @@ function component(camp, sel) {
         subject: p.subject,
         lists: p.lists,
         exclude_lists: p.exclude_lists,
+        contact_window_days: p.contact_window_days,
+        skip_contacted_min: p.skip_contacted_min,
+        skip_unopened_last: p.skip_unopened_last,
         from_email: p.from_email,
         content_type: p.content_type,
         messenger: p.messenger,
