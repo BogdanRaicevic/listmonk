@@ -206,8 +206,28 @@ WITH recipients AS (
         AND ((l.optin = 'double' AND sl.status = 'confirmed') OR (l.optin != 'double' AND sl.status != 'unsubscribed'))
         AND NOT EXISTS (SELECT 1 FROM subscriber_lists esl WHERE esl.subscriber_id = s.id AND esl.list_id = ANY($2::INT[]))
 ),
+-- Set-based equivalent of fork_recent_sends() and fork_ignored_last(), which
+-- are too slow to call per subscriber on large lists.
+sends AS (
+    SELECT cm.subscriber_id, cm.campaign_id, cm.updated_at,
+        ROW_NUMBER() OVER (PARTITION BY cm.subscriber_id ORDER BY cm.updated_at DESC) AS rn
+    FROM campaign_messages cm JOIN recipients rc ON rc.id = cm.subscriber_id
+    WHERE cm.status = 'sent' AND cm.campaign_id != $7
+),
+engaged AS (
+    SELECT subscriber_id, campaign_id FROM campaign_views WHERE subscriber_id IS NOT NULL
+    UNION SELECT subscriber_id, campaign_id FROM link_clicks WHERE subscriber_id IS NOT NULL
+),
+per AS (
+    SELECT s.subscriber_id,
+        COUNT(*) FILTER (WHERE s.updated_at > NOW() - MAKE_INTERVAL(days => $3)) AS n,
+        COUNT(*) FILTER (WHERE s.rn <= $5) = $5 AND COUNT(e.subscriber_id) FILTER (WHERE s.rn <= $5) = 0 AS ignored
+    FROM sends s LEFT JOIN engaged e ON e.subscriber_id = s.subscriber_id AND e.campaign_id = s.campaign_id
+    GROUP BY s.subscriber_id
+),
 r AS (
-    SELECT fork_recent_sends(id, $3, $7) AS n, fork_ignored_last(id, $5, $7) AS ignored FROM recipients
+    SELECT COALESCE(p.n, 0) AS n, COALESCE(p.ignored, false) AS ignored
+    FROM recipients rc LEFT JOIN per p ON p.subscriber_id = rc.id
 )
 SELECT COUNT(*) AS total,
     COUNT(*) FILTER (WHERE n > 0) AS contacted,
