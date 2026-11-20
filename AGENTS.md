@@ -58,6 +58,24 @@ git push origin personal
 
 If `git merge --ff-only` refuses, `master` is no longer a clean mirror. Stop and fix that before merging anything else. Do not merge `personal` into `master`.
 
+Sync every week or two. Conflicts grow with the gap: 23 upstream commits gave 3 small conflicts.
+
+After every merge of `master` into `personal`:
+
+1. Check whether upstream changed `internal/migrations/v7.0.0.go`: `git diff ORIG_HEAD..HEAD -- internal/migrations/v7.0.0.go`. Until upstream releases v7.0.0, it adds to that migration in place, and databases already past v7.0.0 never run the new parts. If it changed, add a `v7.0.1-fork.N` migration that calls `V7_0_0` again (see `v7.0.1-fork.6.go`). Every statement in `V7_0_0` must stay safe to run twice.
+2. Run `go build ./cmd`, `go vet ./...`, `go test ./...` and `make build-frontend`. A clean git merge can still break the build when both sides changed the same logic.
+3. Run the campaigns and lists Playwright specs against a throwaway database (the suite wipes its database).
+4. Run `--upgrade` on the local dev database and start the app.
+
+Push `personal` only after all four pass.
+
+### Keep the fork easy to merge
+
+- Put fork logic in fork-only files: `cmd/<feature>.go`, `queries/fork.sql`, `internal/migrations/v7.0.1-fork.N.go`. Upstream never touches them.
+- In upstream files, keep edits to short hooks marked `Fork:` or `(fork)`.
+- `internal/manager/manager.go` carries the most fork code (message log, retries). When upstream changes it, merge that change on its own, right away.
+- Send generic backend fixes upstream (see below). Every accepted one is a line the fork no longer carries.
+
 ## Pull requests to the original project
 
 Open these against `knadh/listmonk` `master` from time to time. Each PR contains one change the upstream maintainers should consider.
