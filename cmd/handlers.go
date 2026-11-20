@@ -224,8 +224,10 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.DELETE("/api/campaigns/:id", pm(hasID(a.DeleteCampaign), auth.PermCampaignsManageAll, auth.PermCampaignsManage))
 
 		g.GET("/api/media", pm(a.GetAllMedia, auth.PermMediaGet))
+		g.GET("/api/media/tags", pm(a.GetMediaTags, auth.PermMediaGet))
 		g.GET("/api/media/:id", pm(hasID(a.GetMedia), auth.PermMediaGet))
 		g.POST("/api/media", pm(a.UploadMedia, auth.PermMediaManage))
+		g.PUT("/api/media/:id", pm(hasID(a.UpdateMedia), auth.PermMediaManage))
 		g.DELETE("/api/media/:id", pm(hasID(a.DeleteMedia), auth.PermMediaManage))
 
 		g.GET("/api/templates", pm(a.GetTemplates, auth.PermTemplatesGet))
@@ -246,6 +248,7 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 
 		g.GET("/api/profile", a.GetUserProfile)
 		g.PUT("/api/profile", a.UpdateUserProfile)
+		g.POST("/api/profile/email", a.RequestEmailChange)
 		g.GET("/api/users", pm(a.GetUsers, auth.PermUsersGet))
 		g.GET("/api/users/:id", pm(hasID(a.GetUser), auth.PermUsersGet))
 		g.POST("/api/users", pm(a.CreateUser, auth.PermUsersManage))
@@ -296,6 +299,8 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.POST(path.Join(uriAdmin, "/login/twofa"), a.adminPage(a.TwofaPage))
 		g.GET(path.Join(uriAdmin, "/forgot"), a.adminPage(a.ForgotPage))
 		g.POST(path.Join(uriAdmin, "/forgot"), a.adminPage(a.ForgotPage))
+		g.GET(path.Join(uriAdmin, "/verify-email"), a.VerifyEmail)
+		g.POST(path.Join(uriAdmin, "/verify-email"), a.VerifyEmail)
 		g.GET(path.Join(uriAdmin, "/reset"), a.adminPage(a.ResetPage))
 		g.POST(path.Join(uriAdmin, "/reset"), a.adminPage(a.ResetPage))
 
@@ -329,6 +334,7 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		if a.cfg.EnablePublicArchive {
 			g.GET("/archive", a.CampaignArchivesPage)
 			g.GET("/archive.xml", a.GetCampaignArchivesFeed)
+			g.GET("/archive/list/:listUUID", a.ListArchivePage)
 			g.GET("/archive/:id", a.CampaignArchivePage)
 			g.GET("/archive/latest", a.CampaignArchivePageLatest)
 		}

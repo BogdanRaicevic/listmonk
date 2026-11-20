@@ -2,6 +2,7 @@ import Alpine from 'alpinejs';
 import Chart from 'chart.js/auto';
 
 import { api } from '../main.js';
+import { chartDate, chartThemeColor, lineTooltip } from '../charts.js';
 import * as u from '../utils.js';
 import { tagAutocomplete, tagNode } from '../tag-selector.js';
 
@@ -57,28 +58,20 @@ const DEFAULT_LINE = {
     responsive: true,
     lineTension: 0.5,
     maintainAspectRatio: false,
-    interaction: { intersect: false, axis: 'index' },
+    interaction: { intersect: false, mode: 'index' },
     plugins: {
       legend: { display: false },
-      tooltip: {
-        backgroundColor: '#fff',
-        borderColor: '#ddd',
-        borderWidth: 1,
-        bodyColor: '#666',
-        displayColors: true,
-        bodyFont: { size: 15 },
-        bodySpacing: 10,
-        padding: 10,
-        callbacks: {
-          labelColor: (item) => ({
-            backgroundColor: item.dataset.borderColor,
-            borderColor: 'transparent',
-          }),
-        },
-      },
+      tooltip: lineTooltip(undefined, window._analytics?.interval),
     },
     scales: {
-      x: { grid: { display: false } },
+      x: {
+        grid: { display: false },
+        ticks: {
+          font: { size: 10 },
+          color: chartThemeColor('muted-foreground'),
+          callback(value) { return chartDate(this.getLabelForValue(value), window._analytics?.interval); },
+        },
+      },
       y: { grid: { display: false }, ticks: { precision: 0 } },
     },
   },
@@ -114,7 +107,7 @@ const DEFAULT_BAR = {
 // Zero-pad a number to two digits.
 const pad = (n) => String(n).padStart(2, '0');
 
-// Format a timestamp string into a chart axis label.
+// Format a timestamp string for the date-range inputs and summary.
 function toLabel(s) {
   const d = new Date(s);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -236,7 +229,7 @@ function groupCounts(rows, idKey) {
       groups.set(id, { points: [], total: 0 });
     }
     const group = groups.get(id);
-    group.points.push({ x: toLabel(row.timestamp), y: row.count });
+    group.points.push({ x: row.timestamp, y: row.count });
     group.total += row.count;
   });
   return groups;
@@ -275,7 +268,8 @@ function renderCounts(key, items, rows, unsubscriptions, showRate = false) {
     })));
   }
 
-  draw(`chart-${key}`, DEFAULT_LINE, { datasets });
+  const dates = [...new Set(datasets.flatMap((d) => d.data.map((p) => p.x)))].sort((a, b) => new Date(a) - new Date(b));
+  draw(`chart-${key}`, DEFAULT_LINE, { labels: dates, datasets });
 
   // Campaigns have a sent count, so draw one ring per campaign showing
   // count/sent (eg: 3 views of 4 sent = 75% of the ring). Without a sent
